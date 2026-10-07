@@ -1,9 +1,22 @@
 export type LaneIndex = 0 | 1;
 export type PortId = string;
+export type TideLevel = 'high' | 'mid' | 'low';
+
+export interface RouteLegDefinition {
+  from: PortId;
+  to: PortId;
+  tide: TideLevel;
+  maxDraft: number;
+}
 
 export interface RouteDefinition {
   ports: PortId[];
   startPort: PortId;
+  legs?: RouteLegDefinition[];
+}
+
+export interface TideRules {
+  heelDraftFactor: number;
 }
 
 export interface VehicleDefinition {
@@ -58,6 +71,17 @@ export interface LevelDefinition {
   vehicles: VehicleInstance[];
   rules: LevelRules;
   route?: RouteDefinition;
+  tideRules?: TideRules;
+}
+
+export interface TideValidationResult {
+  safe: boolean;
+  leg: RouteLegDefinition;
+  totalWeight: number;
+  balance: number;
+  heelDraftPenalty: number;
+  effectiveDraft: number;
+  maxDraft: number;
 }
 
 export interface RouteStopResult {
@@ -76,6 +100,8 @@ export interface RouteSimulationResult {
   stops: RouteStopResult[];
   finalState: FerryState;
   issue?: RouteIssue;
+  tideFailure?: TideValidationResult;
+  tideChecks: TideValidationResult[];
 }
 
 export interface ExitIssue {
@@ -95,7 +121,8 @@ export type ValidationCode =
   | 'OVERWEIGHT'
   | 'UNBALANCED'
   | 'PRIORITY_BLOCKED'
-  | 'DESTINATION_BLOCKED';
+  | 'DESTINATION_BLOCKED'
+  | 'TIDE_UNSAFE';
 
 export interface LevelValidationResult {
   valid: boolean;
@@ -104,4 +131,5 @@ export interface LevelValidationResult {
   balance: number;
   blockedVehicleId?: string;
   blockerVehicleId?: string;
+  tideFailure?: TideValidationResult;
 }

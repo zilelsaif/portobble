@@ -16,6 +16,17 @@ const routedVehicles = (...entries: Array<[VehicleType, string, number?]>): Vehi
 
 const route = (...ports: string[]) => ({ ports, startPort: ports[0]! });
 
+const tidalRoute = (
+  ports: string[],
+  legs: Array<[string, string, 'high' | 'mid' | 'low', number]>,
+) => ({
+  ports,
+  startPort: ports[0]!,
+  legs: legs.map(([from, to, tide, maxDraft]) => ({ from, to, tide, maxDraft })),
+});
+
+const tideRules = { heelDraftFactor: 1 };
+
 const ferry = (
   balanceTolerance: number,
   goodBalanceThreshold: number,
@@ -51,6 +62,16 @@ export const LEVELS: LevelDefinition[] = [
   { id: 18, title: 'Deep Manifest', hint: 'Mixed lengths make every stop count.', ferry: ferry(2, 1, 1, 15), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['truck', 'D'], ['van', 'C'], ['car', 'B'], ['car', 'C'], ['motorcycle', 'B']), rules: { requireAllVehicles: true, priorityExit: false } },
   { id: 19, title: 'Emergency Route', hint: 'Priority, three destinations, space and balance.', ferry: ferry(2, 1, 1, 16), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['van', 'C'], ['truck', 'D'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
   { id: 20, title: 'Portobble Master', hint: 'Master weight, balance, priority and every destination.', ferry: ferry(1, 1, 1, 15), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['truck', 'D'], ['ambulance', 'B', 1], ['car', 'B'], ['motorcycle', 'C'], ['motorcycle', 'D']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 21, title: 'Low Water', hint: 'Balance the cars to cross at low tide.', ferry: ferry(4, 2, 0, 8), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'low', 4], ['B', 'C', 'high', 6]]), tideRules, vehicles: routedVehicles(['car', 'B'], ['car', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 22, title: 'Shallow Balance', hint: 'A safe ferry can still sit too deep when it heels.', ferry: ferry(3, 1, 0, 10), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'low', 7], ['B', 'C', 'mid', 8]]), tideRules, vehicles: routedVehicles(['car', 'B'], ['van', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 23, title: 'High Then Low', hint: 'Plan the remaining Marlow load for shallow water.', ferry: ferry(3, 1, 0, 10), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'high', 10], ['B', 'C', 'low', 6]]), tideRules, vehicles: routedVehicles(['car', 'B'], ['van', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 24, title: 'Tidal Manifest', hint: 'Clear Seabrook before the shallow Marlow passage.', ferry: ferry(3, 2, 1, 13), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'high', 14], ['B', 'C', 'low', 10]]), tideRules, vehicles: routedVehicles(['van', 'B'], ['car', 'B'], ['truck', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 25, title: 'Heavy Waterline', hint: 'Distribute the truck load for the low-tide departure.', ferry: ferry(2, 1, 0, 13), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'low', 12], ['B', 'C', 'mid', 12]]), tideRules, vehicles: routedVehicles(['truck', 'C'], ['car', 'B'], ['motorcycle', 'C'], ['van', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 26, title: 'Priority Clearance', hint: 'Clear the ambulance and keep enough water beneath the ferry.', ferry: ferry(2, 1, 0, 14), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'low', 12], ['B', 'C', 'mid', 11]]), tideRules, vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['truck', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 27, title: 'Three Tides', hint: 'Plan for high, low and mid tide across the full route.', ferry: ferry(2, 1, 0, 15), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 16], ['B', 'C', 'low', 10], ['C', 'D', 'mid', 10]]), tideRules, vehicles: routedVehicles(['car', 'B'], ['motorcycle', 'B'], ['van', 'C'], ['car', 'C'], ['truck', 'D']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 28, title: 'Marlow Channel', hint: 'The channel to Marlow Quay is narrow at low tide.', ferry: ferry(3, 1, 0, 14), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 14], ['B', 'C', 'low', 10], ['C', 'D', 'mid', 10]]), tideRules, vehicles: routedVehicles(['truck', 'D'], ['van', 'C'], ['car', 'B'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 29, title: 'After Seabrook', hint: 'Plan the balance that remains after Seabrook unloads.', ferry: ferry(3, 1, 0, 14), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 14], ['B', 'C', 'low', 10], ['C', 'D', 'mid', 10]]), tideRules, vehicles: routedVehicles(['car', 'B'], ['van', 'C'], ['truck', 'D'], ['motorcycle', 'D']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 30, title: 'Tidal Harbour Master', hint: 'Master priority, destinations and every water clearance.', ferry: ferry(2, 1, 0, 15), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 16], ['B', 'C', 'low', 10], ['C', 'D', 'mid', 10]]), tideRules, vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['van', 'C'], ['truck', 'D'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
 ];
 
 export function getLevel(levelId: number): LevelDefinition {

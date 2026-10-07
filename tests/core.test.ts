@@ -9,6 +9,7 @@ import { LevelValidator } from '../src/systems/LevelValidator';
 import { PlacementSystem } from '../src/systems/PlacementSystem';
 import { ScoreSystem } from '../src/systems/ScoreSystem';
 import { RouteSystem } from '../src/systems/RouteSystem';
+import { TideSystem } from '../src/systems/TideSystem';
 
 describe('PlacementSystem', () => {
   const level = getLevel(2);
@@ -243,9 +244,74 @@ describe('port presentation metadata', () => {
   });
 });
 
+describe('TideSystem', () => {
+  const level = getLevel(22);
+  const baseLeg = level.route!.legs![0]!;
+  const safeState: FerryState = { placements: [
+    { vehicleId: 'van-2', lane: 0, startCell: 0 },
+    { vehicleId: 'motorcycle-3', lane: 1, startCell: 0 },
+    { vehicleId: 'car-1', lane: 1, startCell: 1 },
+  ] };
+  const poorState: FerryState = { placements: [
+    { vehicleId: 'car-1', lane: 0, startCell: 0 },
+    { vehicleId: 'van-2', lane: 1, startCell: 0 },
+    { vehicleId: 'motorcycle-3', lane: 1, startCell: 2 },
+  ] };
+
+  it('accepts high- and low-tide safe passage', () => {
+    expect(TideSystem.evaluateLeg(level, safeState, { ...baseLeg, tide: 'high', maxDraft: 10 }).safe).toBe(true);
+    expect(TideSystem.evaluateLeg(level, safeState, baseLeg)).toMatchObject({ safe: true, totalWeight: 6, balance: 0, effectiveDraft: 6 });
+  });
+
+  it('accepts the exact maxDraft boundary and rejects one unit above it', () => {
+    expect(TideSystem.evaluateLeg(level, poorState, { ...baseLeg, maxDraft: 8 })).toMatchObject({ safe: true, effectiveDraft: 8 });
+    expect(TideSystem.evaluateLeg(level, poorState, { ...baseLeg, maxDraft: 7 })).toMatchObject({ safe: false, effectiveDraft: 8 });
+  });
+
+  it('uses imbalance as a heel penalty and improved balance restores safety', () => {
+    expect(TideSystem.evaluateLeg(level, poorState, baseLeg)).toMatchObject({ safe: false, balance: 2, heelDraftPenalty: 2 });
+    expect(TideSystem.evaluateLeg(level, safeState, baseLeg)).toMatchObject({ safe: true, balance: 0, heelDraftPenalty: 0 });
+  });
+
+  it('identifies a later failing leg after unload recalculates weight and balance', () => {
+    const routeLevel = getLevel(23);
+    const failing: FerryState = { placements: [
+      { vehicleId: 'van-2', lane: 0, startCell: 0 },
+      { vehicleId: 'motorcycle-3', lane: 0, startCell: 2 },
+      { vehicleId: 'car-1', lane: 1, startCell: 3 },
+    ] };
+    const result = RouteSystem.simulate(routeLevel, failing);
+    expect(result.tideChecks[0]).toMatchObject({ safe: true, totalWeight: 6 });
+    expect(result.tideFailure).toMatchObject({ safe: false, leg: { from: 'B', to: 'C', tide: 'low' }, totalWeight: 4, balance: -4, effectiveDraft: 8, maxDraft: 6 });
+  });
+
+  it('lets a different legal arrangement complete the same multi-leg route', () => {
+    const routeLevel = getLevel(23);
+    const passing: FerryState = { placements: [
+      { vehicleId: 'van-2', lane: 0, startCell: 0 },
+      { vehicleId: 'motorcycle-3', lane: 1, startCell: 0 },
+      { vehicleId: 'car-1', lane: 1, startCell: 1 },
+    ] };
+    const result = RouteSystem.simulate(routeLevel, passing);
+    expect(result.valid).toBe(true);
+    expect(result.tideChecks).toHaveLength(2);
+    expect(result.tideChecks[1]).toMatchObject({ safe: true, totalWeight: 4, balance: -2, effectiveDraft: 6 });
+  });
+
+  it('simulates three tide legs with recalculation after each unload', () => {
+    const routeLevel = getLevel(27);
+    const solution = LevelSolver.solve(routeLevel)!;
+    const result = RouteSystem.simulate(routeLevel, solution);
+    expect(result.valid).toBe(true);
+    expect(result.tideChecks.map((check) => check.leg.tide)).toEqual(['high', 'low', 'mid']);
+    expect(result.tideChecks.map((check) => check.totalWeight)).toEqual([13, 10, 5]);
+    expect(result.finalState.placements).toEqual([]);
+  });
+});
+
 describe('handcrafted levels', () => {
-  it('contains exactly Levels 1–20', () => {
-    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 20 }, (_, index) => index + 1));
+  it('contains exactly Levels 1–30', () => {
+    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 30 }, (_, index) => index + 1));
   });
 
   it('uses ordered, independently configurable balance thresholds', () => {
@@ -267,5 +333,14 @@ describe('handcrafted levels', () => {
     const solution = LevelSolver.solve(level);
     expect(solution).not.toBeNull();
     expect(RouteSystem.simulate(level, solution!).valid).toBe(true);
+  });
+
+  it.each([21, 23, 26, 29, 30])('Tidal Level %i has a full-route solver solution', (levelId) => {
+    const level = getLevel(levelId);
+    const solution = LevelSolver.solve(level);
+    expect(solution).not.toBeNull();
+    const route = RouteSystem.simulate(level, solution!);
+    expect(route.valid).toBe(true);
+    expect(route.tideChecks.every((check) => check.safe)).toBe(true);
   });
 });

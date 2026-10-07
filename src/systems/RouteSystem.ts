@@ -1,4 +1,5 @@
 import type { FerryState, LevelDefinition, Placement, PortId, RouteSimulationResult } from '../models/game';
+import { TideSystem } from './TideSystem';
 
 export class RouteSystem {
   static nextPort(level: LevelDefinition): PortId | undefined {
@@ -8,15 +9,22 @@ export class RouteSystem {
   }
 
   static simulate(level: LevelDefinition, initialState: FerryState): RouteSimulationResult {
-    if (!level.route) return { valid: true, stops: [], finalState: { placements: [...initialState.placements] } };
+    if (!level.route) return { valid: true, stops: [], tideChecks: [], finalState: { placements: [...initialState.placements] } };
     const startIndex = level.route.ports.indexOf(level.route.startPort);
     let state: FerryState = { placements: initialState.placements.map((placement) => ({ ...placement })) };
     const stops: RouteSimulationResult['stops'] = [];
+    const tideChecks: RouteSimulationResult['tideChecks'] = [];
 
     for (const port of level.route.ports.slice(startIndex + 1)) {
+      const leg = level.route.legs?.find((candidate) => candidate.from === (stops.at(-1)?.port ?? level.route?.startPort) && candidate.to === port);
+      if (leg) {
+        const tideCheck = TideSystem.evaluateLeg(level, state, leg);
+        tideChecks.push(tideCheck);
+        if (!tideCheck.safe) return { valid: false, stops, tideChecks, finalState: state, tideFailure: tideCheck };
+      }
       const destinationIds = new Set(level.vehicles.filter((vehicle) => vehicle.destination === port).map((vehicle) => vehicle.id));
       const issue = this.validateStop(level, state, port, destinationIds);
-      if (issue) return { valid: false, stops, finalState: state, issue };
+      if (issue) return { valid: false, stops, tideChecks, finalState: state, issue };
       const unloadedVehicleIds = state.placements
         .filter((placement) => destinationIds.has(placement.vehicleId))
         .sort((a, b) => this.exitSort(level, a, b))
@@ -25,7 +33,7 @@ export class RouteSystem {
       stops.push({ port, unloadedVehicleIds, remainingState: { placements: state.placements.map((placement) => ({ ...placement })) } });
     }
 
-    return { valid: state.placements.length === 0, stops, finalState: state };
+    return { valid: state.placements.length === 0, stops, tideChecks, finalState: state };
   }
 
   private static validateStop(level: LevelDefinition, state: FerryState, port: PortId, destinationIds: Set<string>) {

@@ -36,6 +36,16 @@ export class LevelValidator {
       };
     }
     const route = RouteSystem.simulate(level, state);
+    if (!route.valid && route.tideFailure) {
+      const failure = route.tideFailure;
+      return {
+        valid: false,
+        code: 'TIDE_UNSAFE',
+        message: `TOO DEEP FOR ${failure.leg.tide.toUpperCase()} TIDE • ${portFullName(failure.leg.from).toUpperCase()} → ${portFullName(failure.leg.to).toUpperCase()}`,
+        balance: balance.value,
+        tideFailure: failure,
+      };
+    }
     if (!route.valid && route.issue) {
       const blocked = level.vehicles.find((item) => item.id === route.issue?.blockedVehicleId);
       const blocker = level.vehicles.find((item) => item.id === route.issue?.blockerVehicleId);

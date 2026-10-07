@@ -1,8 +1,10 @@
-# PORTOBBLE v0.3
+# PORTOBBLE v0.4
 
 PORTOBBLE is a portrait-first ferry logistics puzzle set in a stylized miniature harbour. A successful load must fit on the deck, balance the ferry, and let priority vehicles reach an exit in the required order.
 
 Levels 11–20 add destination planning: load once at the first port, then ensure vehicles for each earlier destination can unload before later-port cargo. Priority ordering remains active within destination groups.
+
+Levels 21–30 add deterministic water clearance. Each route leg has a fixed tide and maximum draft; vehicle weight plus heel from poor balance determines whether the remaining ferry load can pass safely.
 
 ## Requirements
 
@@ -59,7 +61,7 @@ src/
   config/      visible title and game-wide dimensions/colours
   data/        central vehicle definitions and ten handcrafted levels
   models/      framework-independent game types
-  systems/     placement, balance, exit, route simulation, validation, solver, save, scoring
+  systems/     placement, balance, exit, route/tide simulation, validation, solver, save, scoring
   scenes/      Phaser boot, title, level select, and gameplay scenes
   ui/          shared Phaser UI helpers
   utils/       lightweight generated mechanical sound effects

@@ -13,14 +13,14 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   init(data: { chapter?: number }): void {
-    this.chapter = data.chapter ?? this.chapter;
+    this.chapter = Phaser.Math.Clamp(data.chapter ?? this.chapter, 0, 2);
   }
 
   create(): void {
     addWaterBackdrop(this);
     addPanel(this, 195, 348, 354, 610);
     this.add.text(195, 56, 'HARBOUR ROUTES', textStyle(26)).setOrigin(0.5);
-    const chapterName = this.chapter === 0 ? 'CHAPTER 1 • THE CROSSING' : 'CHAPTER 2 • PORT HOPPER';
+    const chapterName = ['CHAPTER 1 • THE CROSSING', 'CHAPTER 2 • PORT HOPPER', 'CHAPTER 3 • TIDAL PASSAGE'][this.chapter]!;
     this.add.text(195, 82, chapterName, textStyle(11, '#6b7b77')).setOrigin(0.5).setLetterSpacing(1.2);
     const save = SaveSystem.load();
     LEVELS.slice(this.chapter * 10, this.chapter * 10 + 10).forEach((level, index) => {
@@ -41,12 +41,11 @@ export class LevelSelectScene extends Phaser.Scene {
       if (stars > 0) addStars(this, x, y + 18, stars, 11);
       else this.add.text(x, y + 18, unlocked ? level.title : 'Finish prior route', textStyle(9, unlocked ? '#d9eee5' : '#e7e7e2')).setOrigin(0.5);
     });
-    addButton(this, 78, 647, 96, 46, 'BACK', () => this.scene.start('Title'), 'secondary');
-    addButton(this, 195, 647, 112, 46, this.chapter === 0 ? 'PORT HOPPER →' : '← CROSSING', () => {
-      this.scene.restart({ chapter: this.chapter === 0 ? 1 : 0 });
-    }, 'secondary');
+    addButton(this, 50, 647, 72, 46, 'BACK', () => this.scene.start('Title'), 'secondary');
+    if (this.chapter > 0) addButton(this, 140, 647, 86, 46, '← PREV', () => this.scene.restart({ chapter: this.chapter - 1 }), 'secondary');
+    if (this.chapter < 2) addButton(this, 238, 647, 86, 46, 'NEXT →', () => this.scene.restart({ chapter: this.chapter + 1 }), 'secondary');
     if (DEBUG_MODE) {
-      addButton(this, 326, 647, 104, 46, 'UNLOCK ALL', () => {
+      addButton(this, 342, 647, 82, 46, 'UNLOCK', () => {
         SaveSystem.unlockAll();
         this.scene.restart();
       }, 0x6b5f87);
