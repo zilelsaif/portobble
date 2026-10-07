@@ -6,6 +6,16 @@ const vehicles = (...types: Array<VehicleType | [VehicleType, number]>): Vehicle
     return { id: `${type}-${index + 1}`, type, ...(priority ? { priority } : {}) };
   });
 
+const routedVehicles = (...entries: Array<[VehicleType, string, number?]>): VehicleInstance[] =>
+  entries.map(([type, destination, priority], index) => ({
+    id: `${type}-${index + 1}`,
+    type,
+    destination,
+    ...(priority ? { priority } : {}),
+  }));
+
+const route = (...ports: string[]) => ({ ports, startPort: ports[0]! });
+
 const ferry = (
   balanceTolerance: number,
   goodBalanceThreshold: number,
@@ -31,6 +41,16 @@ export const LEVELS: LevelDefinition[] = [
   { id: 8, title: 'Full Deck', hint: 'Every cell matters. Balance a completely full ferry.', ferry: ferry(1, 1, 0, 18), vehicles: vehicles('van', 'van', 'car', 'car', 'motorcycle', 'motorcycle'), rules: { requireAllVehicles: true, priorityExit: false } },
   { id: 9, title: 'Tight Passage', hint: 'Heavy cargo and a priority vehicle share limited room.', ferry: ferry(2, 1, 1, 16), vehicles: vehicles('truck', ['ambulance', 1], 'car', 'motorcycle', 'motorcycle'), rules: { requireAllVehicles: true, priorityExit: true } },
   { id: 10, title: 'Harbour Master', hint: 'Fit, balance, and preserve the emergency exit.', ferry: ferry(1, 1, 1, 18), vehicles: vehicles('truck', ['ambulance', 1], 'van', 'motorcycle', 'motorcycle'), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 11, title: 'Port Labels', hint: 'Badges show where each vehicle must leave.', ferry: ferry(6, 3, 1, 10), route: route('A', 'B', 'C'), vehicles: routedVehicles(['car', 'B'], ['car', 'C'], ['van', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 12, title: 'Seabrook First', hint: 'Keep the Seabrook Harbour car ahead of Marlow Quay cargo.', ferry: ferry(6, 3, 1, 10), route: route('A', 'B', 'C'), vehicles: routedVehicles(['car', 'B'], ['truck', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 13, title: 'Clear Seabrook', hint: 'Both Seabrook Harbour vehicles must leave before Marlow Quay.', ferry: ferry(5, 3, 1, 12), route: route('A', 'B', 'C'), vehicles: routedVehicles(['car', 'B'], ['van', 'B'], ['truck', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 14, title: 'Split Manifest', hint: 'Use both lanes and preserve destination order.', ferry: ferry(4, 2, 1, 14), route: route('A', 'B', 'C'), vehicles: routedVehicles(['van', 'B'], ['car', 'C'], ['car', 'B'], ['motorcycle', 'C'], ['van', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 15, title: 'Balanced Route', hint: 'Destination order and balance both matter.', ferry: ferry(2, 1, 1, 15), route: route('A', 'B', 'C'), vehicles: routedVehicles(['truck', 'C'], ['car', 'B'], ['van', 'C'], ['motorcycle', 'B'], ['car', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 16, title: 'Priority Port', hint: 'The Seabrook Harbour ambulance must leave before its car.', ferry: ferry(4, 2, 1, 14), route: route('A', 'B', 'C'), vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['truck', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 17, title: 'Three Stops', hint: 'Plan B, then C, then D in each lane.', ferry: ferry(3, 2, 1, 15), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['car', 'B'], ['motorcycle', 'B'], ['van', 'C'], ['car', 'C'], ['truck', 'D']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 18, title: 'Deep Manifest', hint: 'Mixed lengths make every stop count.', ferry: ferry(2, 1, 1, 15), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['truck', 'D'], ['van', 'C'], ['car', 'B'], ['car', 'C'], ['motorcycle', 'B']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 19, title: 'Emergency Route', hint: 'Priority, three destinations, space and balance.', ferry: ferry(2, 1, 1, 16), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['van', 'C'], ['truck', 'D'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 20, title: 'Portobble Master', hint: 'Master weight, balance, priority and every destination.', ferry: ferry(1, 1, 1, 15), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['truck', 'D'], ['ambulance', 'B', 1], ['car', 'B'], ['motorcycle', 'C'], ['motorcycle', 'D']), rules: { requireAllVehicles: true, priorityExit: true } },
 ];
 
 export function getLevel(levelId: number): LevelDefinition {

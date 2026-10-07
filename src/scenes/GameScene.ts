@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { DEBUG_MODE, GAME_CONFIG, REDUCED_MOTION } from '../config/gameConfig';
 import { getLevel } from '../data/levels';
 import { getVehicleDefinition } from '../data/vehicles';
+import { portFullName, portShortName } from '../data/ports';
 import type { FerryState, LaneIndex, LevelDefinition, Placement, VehicleInstance } from '../models/game';
 import { BalanceSystem } from '../systems/BalanceSystem';
 import { ExitSystem } from '../systems/ExitSystem';
@@ -10,6 +11,7 @@ import { LevelValidator } from '../systems/LevelValidator';
 import { PlacementSystem } from '../systems/PlacementSystem';
 import { SaveSystem } from '../systems/SaveSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
+import { RouteSystem } from '../systems/RouteSystem';
 import { addButton, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
 
@@ -36,6 +38,7 @@ export class GameScene extends Phaser.Scene {
   private balanceNeedle!: Phaser.GameObjects.Triangle;
   private balancePanel!: Phaser.GameObjects.Container;
   private debugText?: Phaser.GameObjects.Text;
+  private routeText?: Phaser.GameObjects.Text;
   private sailing = false;
 
   constructor() {
@@ -56,7 +59,13 @@ export class GameScene extends Phaser.Scene {
     this.add.rectangle(195, 27, 390, 54, GAME_CONFIG.colors.navy, 0.96);
     this.add.text(19, 14, `ROUTE ${String(this.level.id).padStart(2, '0')}`, textStyle(12, '#d7e7df', 'left')).setLetterSpacing(1.4);
     this.add.text(19, 31, this.level.title.toUpperCase(), textStyle(18, '#fff7df', 'left'));
-    const objective = this.level.rules.priorityExit ? '✚ AMBULANCE OUT FIRST  →' : this.level.hint;
+    if (this.level.route) {
+      this.routeText = this.add.text(371, 21, this.formatRoute(RouteSystem.nextPort(this.level)), textStyle(11, '#d9eee5', 'right')).setOrigin(1, 0.5);
+    }
+    const nextPort = RouteSystem.nextPort(this.level);
+    const objective = this.level.rules.priorityExit
+      ? `✚ ${nextPort ? `${portFullName(nextPort).toUpperCase()} • ` : ''}AMBULANCE OUT FIRST  →`
+      : this.level.hint;
     const objectivePanel = this.add.rectangle(195, 74, 350, 36, this.level.rules.priorityExit ? 0xf4eee0 : 0xe1ebe4, 0.98)
       .setStrokeStyle(2, this.level.rules.priorityExit ? GAME_CONFIG.colors.red : GAME_CONFIG.colors.green, 0.8);
     this.add.text(195, 74, objective, textStyle(11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328);
@@ -160,7 +169,10 @@ export class GameScene extends Phaser.Scene {
       }
       const label = this.add.text(0, vehicle.type === 'ambulance' ? -35 : -5, vehicle.priority ? `◆ PRIORITY` : definition.shortLabel, textStyle(9, '#fff8e8')).setOrigin(0.5);
       if (vehicle.priority) label.setBackgroundColor('#9d3f42').setPadding(5, 2);
-      const container = this.add.container(0, 0, [body, label]).setSize(width, 96).setDepth(10);
+      const badge = vehicle.destination
+        ? this.add.text(width / 2 - 13, vehicle.type === 'motorcycle' ? -24 : 3, portShortName(vehicle.destination), textStyle(8, '#17313a')).setOrigin(0.5).setBackgroundColor('#fff4c7').setPadding(3, 2)
+        : undefined;
+      const container = this.add.container(0, 0, badge ? [body, label, badge] : [body, label]).setSize(width, 96).setDepth(10);
       container.setData('vehicleId', vehicle.id).setData('queueIndex', index).setInteractive({ useHandCursor: true, draggable: true });
       this.input.setDraggable(container);
       this.bindDrag(container, vehicle);
@@ -304,7 +316,10 @@ export class GameScene extends Phaser.Scene {
       this.balanceNeedle.x = needleX;
       this.ferryVisual.setAngle(tilt);
     }
-    if (this.debugText) this.debugText.setText(`balance=${result.value}  loaded=${this.state.placements.length}/${this.level.vehicles.length}`);
+    if (this.debugText) {
+      const nextPort = RouteSystem.nextPort(this.level);
+      this.debugText.setText(`balance=${result.value} loaded=${this.state.placements.length}/${this.level.vehicles.length}${nextPort ? ` next=${nextPort}:${portShortName(nextPort)}` : ''}`);
+    }
   }
 
   private createControls(): void {
@@ -321,8 +336,8 @@ export class GameScene extends Phaser.Scene {
     const validation = LevelValidator.validate(this.level, this.state);
     if (!validation.valid) {
       FeedbackSystem.event('failure');
-      if (validation.code === 'PRIORITY_BLOCKED' && validation.blockedVehicleId && validation.blockerVehicleId) {
-        this.showBlockedFailure(validation.blockedVehicleId, validation.blockerVehicleId);
+      if ((validation.code === 'PRIORITY_BLOCKED' || validation.code === 'DESTINATION_BLOCKED') && validation.blockedVehicleId && validation.blockerVehicleId) {
+        this.showBlockedFailure(validation.blockedVehicleId, validation.blockerVehicleId, validation.message);
       } else {
         this.feedbackText.setText(`✕ ${validation.message}`).setColor('#ffd0c5');
         if (validation.code === 'UNBALANCED') {
@@ -340,6 +355,7 @@ export class GameScene extends Phaser.Scene {
     this.feedbackText.setText('✓ MANIFEST CLEAR • RAMP CLOSING').setColor('#d9ffd6');
     Sfx.play('ramp');
     const order = ExitSystem.unloadingOrder(this.level, this.state);
+    const route = RouteSystem.simulate(this.level, this.state);
     this.tweens.add({ targets: this.ramp, scaleX: 0.22, duration: REDUCED_MOTION ? 1 : 240, ease: 'Sine.in', onComplete: () => {
       Sfx.play('horn');
       this.feedbackText.setText('FERRY AWAY • NEXT STOP HARBOUR').setColor('#d9ffd6');
@@ -347,7 +363,10 @@ export class GameScene extends Phaser.Scene {
       Sfx.play('wake');
       this.tweens.add({
         targets: [this.ferryVisual, this.wake, ...this.vehicles.values()], x: '+=20', duration: REDUCED_MOTION ? 1 : 650,
-        ease: 'Sine.inOut', onComplete: () => this.time.delayedCall(REDUCED_MOTION ? 1 : 320, () => this.animateUnload(order)),
+        ease: 'Sine.inOut', onComplete: () => this.time.delayedCall(REDUCED_MOTION ? 1 : 320, () => {
+          if (this.level.route) this.animateRoute(route.stops, 0);
+          else this.animateUnload(order);
+        }),
       });
     } });
   }
@@ -364,19 +383,49 @@ export class GameScene extends Phaser.Scene {
     } });
   }
 
+  private animateRoute(stops: ReturnType<typeof RouteSystem.simulate>['stops'], index: number): void {
+    const stop = stops[index];
+    if (!stop) {
+      this.finishLevel();
+      return;
+    }
+    this.routeText?.setText(this.formatRoute(stop.port));
+    this.feedbackText.setText(`${portFullName(stop.port).toUpperCase()} • UNLOADING ${stop.unloadedVehicleIds.length}`).setColor('#d9ffd6');
+    Sfx.play('ramp');
+    const tweens = stop.unloadedVehicleIds.flatMap((vehicleId) => {
+      const container = this.vehicles.get(vehicleId);
+      return container ? [{ targets: container, x: 438, alpha: 0, duration: REDUCED_MOTION ? 1 : 180, ease: 'Sine.in' }] : [];
+    });
+    this.tweens.chain({
+      targets: [],
+      tweens,
+      onComplete: () => {
+        const next = stops[index + 1];
+        if (!next) this.finishLevel();
+        else this.time.delayedCall(REDUCED_MOTION ? 1 : 320, () => {
+          this.routeText?.setText(this.formatRoute(next.port));
+          this.feedbackText.setText(`DEPARTING FOR ${portFullName(next.port).toUpperCase()}`).setColor('#d9ffd6');
+          Sfx.play('horn');
+          this.time.delayedCall(REDUCED_MOTION ? 1 : 420, () => this.animateRoute(stops, index + 1));
+        });
+      },
+    });
+  }
+
   private finishLevel(): void {
     const stars = ScoreSystem.stars(this.level, this.state);
     SaveSystem.recordCompletion(this.level.id, stars);
     FeedbackSystem.event('success');
     const shade = this.add.rectangle(195, 350, 390, 700, 0x102a32, 0.78).setDepth(90);
     const panel = addPanel(this, 195, 342, 336, 348, 91);
-    this.add.text(195, 212, 'HARBOUR ARRIVAL', textStyle(11, '#6a7b77')).setOrigin(0.5).setDepth(92).setLetterSpacing(1.7);
+    const finalPort = this.level.route?.ports.at(-1);
+    this.add.text(195, 212, finalPort ? `ARRIVED • ${portFullName(finalPort).toUpperCase()}` : 'HARBOUR ARRIVAL', textStyle(11, '#6a7b77')).setOrigin(0.5).setDepth(92).setLetterSpacing(1.3);
     this.add.text(195, 242, 'CROSSING COMPLETE', textStyle(25)).setOrigin(0.5).setDepth(92);
     addStars(this, 195, 299, stars, 43).setDepth(92);
     this.add.text(195, 347, stars === 3 ? '● PERFECTLY BALANCED' : stars === 2 ? '● GOOD BALANCE' : '● SAFE ARRIVAL', textStyle(14, '#4f765e')).setOrigin(0.5).setDepth(92);
-    const nextLevel = Math.min(10, this.level.id + 1);
-    const next = addButton(this, 195, 416, 226, 54, this.level.id === 10 ? 'HARBOUR ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
-      this.scene.start(this.level.id === 10 ? 'LevelSelect' : 'Game', this.level.id === 10 ? undefined : { levelId: nextLevel });
+    const nextLevel = Math.min(20, this.level.id + 1);
+    const next = addButton(this, 195, 416, 226, 54, this.level.id === 20 ? 'HARBOUR ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
+      this.scene.start(this.level.id === 20 ? 'LevelSelect' : 'Game', this.level.id === 20 ? { chapter: 1 } : { levelId: nextLevel });
     });
     next.setDepth(93);
     const retry = addButton(this, 195, 480, 168, 46, 'REPLAY', () => this.scene.restart({ levelId: this.level.id }), 'secondary');
@@ -417,10 +466,10 @@ export class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: container, angle: { from: -4, to: 4 }, duration: 45, yoyo: true, repeat: 3, onComplete: () => container.setAngle(0) });
   }
 
-  private showBlockedFailure(blockedVehicleId: string, blockerVehicleId: string): void {
+  private showBlockedFailure(blockedVehicleId: string, blockerVehicleId: string, message: string): void {
     const blocked = this.vehicles.get(blockedVehicleId);
     const blocker = this.vehicles.get(blockerVehicleId);
-    this.feedbackText.setText('✕ AMBULANCE BLOCKED • CLEAR PATH TO EXIT →').setColor('#ffd0c5');
+    this.feedbackText.setText(`✕ ${message} • CLEAR EXIT →`).setColor('#ffd0c5');
     if (blocked) {
       const halo = this.add.ellipse(blocked.x, blocked.y, blocked.displayWidth + 18, 60, 0xf6e8a6, 0.14).setStrokeStyle(4, 0xf6e8a6, 0.95).setDepth(9);
       this.tweens.add({ targets: [blocked, halo], scaleX: '+=0.05', scaleY: '+=0.05', alpha: { from: 0.75, to: 1 }, duration: 130, yoyo: true, repeat: 2, onComplete: () => halo.destroy() });
@@ -430,6 +479,14 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: [blocker, blockerHalo], angle: { from: -3, to: 3 }, duration: 65, yoyo: true, repeat: 4, onComplete: () => { blocker.setAngle(0); blockerHalo.destroy(); } });
     }
     this.exitCues.forEach((cue, index) => this.tweens.add({ targets: cue, alpha: { from: 0.35, to: 1 }, scale: { from: 0.96, to: 1.08 }, duration: 140, delay: index * 40, yoyo: true, repeat: 2 }));
+  }
+
+  private formatRoute(current?: string): string {
+    if (!this.level.route) return '';
+    return this.level.route.ports.map((port) => {
+      const name = portShortName(port);
+      return port === current ? `[${name}]` : name;
+    }).join(' → ');
   }
 
   private pulseVehicle(vehicleId: string): void {

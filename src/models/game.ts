@@ -1,4 +1,10 @@
 export type LaneIndex = 0 | 1;
+export type PortId = string;
+
+export interface RouteDefinition {
+  ports: PortId[];
+  startPort: PortId;
+}
 
 export interface VehicleDefinition {
   id: VehicleType;
@@ -17,6 +23,7 @@ export interface VehicleInstance {
   id: string;
   type: VehicleType;
   priority?: number;
+  destination?: PortId;
 }
 
 export interface Placement {
@@ -50,6 +57,25 @@ export interface LevelDefinition {
   ferry: FerryDefinition;
   vehicles: VehicleInstance[];
   rules: LevelRules;
+  route?: RouteDefinition;
+}
+
+export interface RouteStopResult {
+  port: PortId;
+  unloadedVehicleIds: string[];
+  remainingState: FerryState;
+}
+
+export interface RouteIssue extends ExitIssue {
+  port: PortId;
+  code: 'DESTINATION_BLOCKED' | 'PRIORITY_BLOCKED';
+}
+
+export interface RouteSimulationResult {
+  valid: boolean;
+  stops: RouteStopResult[];
+  finalState: FerryState;
+  issue?: RouteIssue;
 }
 
 export interface ExitIssue {
@@ -68,7 +94,8 @@ export type ValidationCode =
   | 'INVALID_PLACEMENT'
   | 'OVERWEIGHT'
   | 'UNBALANCED'
-  | 'PRIORITY_BLOCKED';
+  | 'PRIORITY_BLOCKED'
+  | 'DESTINATION_BLOCKED';
 
 export interface LevelValidationResult {
   valid: boolean;

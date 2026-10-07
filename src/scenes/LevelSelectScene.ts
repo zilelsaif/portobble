@@ -6,17 +6,24 @@ import { addButton, addPanel, addStars, addWaterBackdrop, textStyle } from '../u
 import { Sfx } from '../utils/Sfx';
 
 export class LevelSelectScene extends Phaser.Scene {
+  private chapter = 0;
+
   constructor() {
     super('LevelSelect');
+  }
+
+  init(data: { chapter?: number }): void {
+    this.chapter = data.chapter ?? this.chapter;
   }
 
   create(): void {
     addWaterBackdrop(this);
     addPanel(this, 195, 348, 354, 610);
     this.add.text(195, 56, 'HARBOUR ROUTES', textStyle(26)).setOrigin(0.5);
-    this.add.text(195, 82, 'SELECT A CROSSING', textStyle(11, '#6b7b77')).setOrigin(0.5).setLetterSpacing(1.7);
+    const chapterName = this.chapter === 0 ? 'CHAPTER 1 • THE CROSSING' : 'CHAPTER 2 • PORT HOPPER';
+    this.add.text(195, 82, chapterName, textStyle(11, '#6b7b77')).setOrigin(0.5).setLetterSpacing(1.2);
     const save = SaveSystem.load();
-    LEVELS.forEach((level, index) => {
+    LEVELS.slice(this.chapter * 10, this.chapter * 10 + 10).forEach((level, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2);
       const x = 110 + column * 170;
@@ -35,8 +42,11 @@ export class LevelSelectScene extends Phaser.Scene {
       else this.add.text(x, y + 18, unlocked ? level.title : 'Finish prior route', textStyle(9, unlocked ? '#d9eee5' : '#e7e7e2')).setOrigin(0.5);
     });
     addButton(this, 78, 647, 96, 46, 'BACK', () => this.scene.start('Title'), 'secondary');
+    addButton(this, 195, 647, 112, 46, this.chapter === 0 ? 'PORT HOPPER →' : '← CROSSING', () => {
+      this.scene.restart({ chapter: this.chapter === 0 ? 1 : 0 });
+    }, 'secondary');
     if (DEBUG_MODE) {
-      addButton(this, 288, 647, 150, 46, 'UNLOCK ALL', () => {
+      addButton(this, 326, 647, 104, 46, 'UNLOCK ALL', () => {
         SaveSystem.unlockAll();
         this.scene.restart();
       }, 0x6b5f87);

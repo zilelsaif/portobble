@@ -1,0 +1,58 @@
+import type { FerryState, LevelDefinition, Placement, PortId, RouteSimulationResult } from '../models/game';
+
+export class RouteSystem {
+  static nextPort(level: LevelDefinition): PortId | undefined {
+    if (!level.route) return undefined;
+    const startIndex = level.route.ports.indexOf(level.route.startPort);
+    return level.route.ports[startIndex + 1];
+  }
+
+  static simulate(level: LevelDefinition, initialState: FerryState): RouteSimulationResult {
+    if (!level.route) return { valid: true, stops: [], finalState: { placements: [...initialState.placements] } };
+    const startIndex = level.route.ports.indexOf(level.route.startPort);
+    let state: FerryState = { placements: initialState.placements.map((placement) => ({ ...placement })) };
+    const stops: RouteSimulationResult['stops'] = [];
+
+    for (const port of level.route.ports.slice(startIndex + 1)) {
+      const destinationIds = new Set(level.vehicles.filter((vehicle) => vehicle.destination === port).map((vehicle) => vehicle.id));
+      const issue = this.validateStop(level, state, port, destinationIds);
+      if (issue) return { valid: false, stops, finalState: state, issue };
+      const unloadedVehicleIds = state.placements
+        .filter((placement) => destinationIds.has(placement.vehicleId))
+        .sort((a, b) => this.exitSort(level, a, b))
+        .map((placement) => placement.vehicleId);
+      state = { placements: state.placements.filter((placement) => !destinationIds.has(placement.vehicleId)) };
+      stops.push({ port, unloadedVehicleIds, remainingState: { placements: state.placements.map((placement) => ({ ...placement })) } });
+    }
+
+    return { valid: state.placements.length === 0, stops, finalState: state };
+  }
+
+  private static validateStop(level: LevelDefinition, state: FerryState, port: PortId, destinationIds: Set<string>) {
+    for (const lane of [0, 1] as const) {
+      const lanePlacements = state.placements.filter((placement) => placement.lane === lane).sort((a, b) => b.startCell - a.startCell);
+      for (const target of lanePlacements.filter((placement) => destinationIds.has(placement.vehicleId))) {
+        const blocker = lanePlacements.find((placement) => placement.startCell > target.startCell && !destinationIds.has(placement.vehicleId));
+        if (blocker) return { port, code: 'DESTINATION_BLOCKED' as const, blockedVehicleId: target.vehicleId, blockerVehicleId: blocker.vehicleId };
+      }
+      const targetPlacements = lanePlacements.filter((placement) => destinationIds.has(placement.vehicleId));
+      for (const priority of targetPlacements.filter((placement) => (level.vehicles.find((vehicle) => vehicle.id === placement.vehicleId)?.priority ?? 0) > 0)) {
+        const priorityValue = level.vehicles.find((vehicle) => vehicle.id === priority.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+        const blocker = targetPlacements.find((placement) => {
+          const value = level.vehicles.find((vehicle) => vehicle.id === placement.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+          return placement.startCell > priority.startCell && value > priorityValue;
+        });
+        if (blocker) return { port, code: 'PRIORITY_BLOCKED' as const, blockedVehicleId: priority.vehicleId, blockerVehicleId: blocker.vehicleId };
+      }
+    }
+    return undefined;
+  }
+
+  private static exitSort(level: LevelDefinition, a: Placement, b: Placement): number {
+    const priorityA = level.vehicles.find((vehicle) => vehicle.id === a.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+    const priorityB = level.vehicles.find((vehicle) => vehicle.id === b.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+    if (priorityA !== priorityB) return priorityA - priorityB;
+    if (a.lane !== b.lane) return a.lane - b.lane;
+    return b.startCell - a.startCell;
+  }
+}

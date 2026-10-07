@@ -1,8 +1,10 @@
 import { getVehicleDefinition } from '../data/vehicles';
+import { portFullName } from '../data/ports';
 import type { FerryState, LevelDefinition, LevelValidationResult } from '../models/game';
 import { BalanceSystem } from './BalanceSystem';
 import { ExitSystem } from './ExitSystem';
 import { PlacementSystem } from './PlacementSystem';
+import { RouteSystem } from './RouteSystem';
 
 export class LevelValidator {
   static validate(level: LevelDefinition, state: FerryState): LevelValidationResult {
@@ -31,6 +33,21 @@ export class LevelValidator {
         balance: balance.value,
         blockedVehicleId: issue?.blockedVehicleId,
         blockerVehicleId: issue?.blockerVehicleId,
+      };
+    }
+    const route = RouteSystem.simulate(level, state);
+    if (!route.valid && route.issue) {
+      const blocked = level.vehicles.find((item) => item.id === route.issue?.blockedVehicleId);
+      const blocker = level.vehicles.find((item) => item.id === route.issue?.blockerVehicleId);
+      return {
+        valid: false,
+        code: route.issue.code,
+        message: route.issue.code === 'PRIORITY_BLOCKED'
+          ? `${blocked ? getVehicleDefinition(blocked.type).displayName.toUpperCase() : 'PRIORITY VEHICLE'} FOR ${portFullName(route.issue.port).toUpperCase()} BLOCKED${blocker ? ` BY ${getVehicleDefinition(blocker.type).displayName.toUpperCase()}` : ''}`
+          : `${blocked ? getVehicleDefinition(blocked.type).displayName.toUpperCase() : 'VEHICLE'} FOR ${portFullName(route.issue.port).toUpperCase()} BLOCKED${blocker ? ` BY ${getVehicleDefinition(blocker.type).displayName.toUpperCase()}` : ''}`,
+        balance: balance.value,
+        blockedVehicleId: route.issue.blockedVehicleId,
+        blockerVehicleId: route.issue.blockerVehicleId,
       };
     }
     return { valid: true, code: 'VALID', message: 'READY TO SAIL', balance: balance.value };

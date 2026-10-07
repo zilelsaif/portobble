@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LEVELS, getLevel } from '../src/data/levels';
+import { PORTS, portFullName, portShortName } from '../src/data/ports';
 import type { FerryState, Placement } from '../src/models/game';
 import { BalanceSystem } from '../src/systems/BalanceSystem';
 import { ExitSystem } from '../src/systems/ExitSystem';
@@ -7,6 +8,7 @@ import { LevelSolver } from '../src/systems/LevelSolver';
 import { LevelValidator } from '../src/systems/LevelValidator';
 import { PlacementSystem } from '../src/systems/PlacementSystem';
 import { ScoreSystem } from '../src/systems/ScoreSystem';
+import { RouteSystem } from '../src/systems/RouteSystem';
 
 describe('PlacementSystem', () => {
   const level = getLevel(2);
@@ -162,9 +164,88 @@ describe('LevelValidator', () => {
   });
 });
 
+describe('RouteSystem', () => {
+  it('accepts a next-port vehicle with a clear exit', () => {
+    const level = getLevel(12);
+    const result = RouteSystem.simulate(level, { placements: [
+      { vehicleId: 'truck-2', lane: 0, startCell: 0 },
+      { vehicleId: 'car-1', lane: 0, startCell: 3 },
+      { vehicleId: 'motorcycle-3', lane: 1, startCell: 0 },
+    ] });
+    expect(result.valid).toBe(true);
+    expect(result.stops[0]?.unloadedVehicleIds).toEqual(['car-1']);
+  });
+
+  it('detects a later-port blocker and reports both identities', () => {
+    const result = RouteSystem.simulate(getLevel(12), { placements: [
+      { vehicleId: 'car-1', lane: 0, startCell: 0 },
+      { vehicleId: 'truck-2', lane: 0, startCell: 2 },
+      { vehicleId: 'motorcycle-3', lane: 1, startCell: 0 },
+    ] });
+    expect(result).toMatchObject({
+      valid: false,
+      issue: { code: 'DESTINATION_BLOCKED', port: 'B', blockedVehicleId: 'car-1', blockerVehicleId: 'truck-2' },
+    });
+  });
+
+  it('allows multiple same-destination vehicles to unload before later cargo', () => {
+    const solution = LevelSolver.solve(getLevel(13));
+    const result = RouteSystem.simulate(getLevel(13), solution!);
+    expect(result.valid).toBe(true);
+    expect(new Set(result.stops[0]?.unloadedVehicleIds)).toEqual(new Set(['car-1', 'van-2']));
+  });
+
+  it('rejects a normal vehicle ahead of priority at the same destination', () => {
+    const result = RouteSystem.simulate(getLevel(16), { placements: [
+      { vehicleId: 'ambulance-1', lane: 0, startCell: 0 },
+      { vehicleId: 'car-2', lane: 0, startCell: 2 },
+      { vehicleId: 'truck-3', lane: 1, startCell: 0 },
+      { vehicleId: 'motorcycle-4', lane: 1, startCell: 3 },
+    ] });
+    expect(result).toMatchObject({
+      valid: false,
+      issue: { code: 'PRIORITY_BLOCKED', port: 'B', blockedVehicleId: 'ambulance-1', blockerVehicleId: 'car-2' },
+    });
+  });
+
+  it('simulates B, C and D unloading and ends empty', () => {
+    const level = getLevel(17);
+    const solution = LevelSolver.solve(level);
+    const result = RouteSystem.simulate(level, solution!);
+    expect(result.valid).toBe(true);
+    expect(result.stops.map((stop) => stop.port)).toEqual(['B', 'C', 'D']);
+    expect(result.stops[0]?.remainingState.placements.every((placement) => !['car-1', 'motorcycle-2'].includes(placement.vehicleId))).toBe(true);
+    expect(result.stops[1]?.remainingState.placements.map((placement) => placement.vehicleId)).toEqual(['truck-5']);
+    expect(result.finalState.placements).toEqual([]);
+  });
+});
+
+describe('port presentation metadata', () => {
+  it('maps internal route IDs to fictional full and compact names', () => {
+    expect(PORTS).toMatchObject({
+      A: { fullName: 'Brindle Bay', shortName: 'BRI' },
+      B: { fullName: 'Seabrook Harbour', shortName: 'SEA' },
+      C: { fullName: 'Marlow Quay', shortName: 'MAR' },
+      D: { fullName: 'Ironhaven Port', shortName: 'IRON' },
+    });
+    expect(portFullName('B')).toBe('Seabrook Harbour');
+    expect(portShortName('D')).toBe('IRON');
+  });
+
+  it('uses full harbour names in destination failure messages', () => {
+    const result = LevelValidator.validate(getLevel(12), { placements: [
+      { vehicleId: 'car-1', lane: 0, startCell: 0 },
+      { vehicleId: 'truck-2', lane: 0, startCell: 2 },
+      { vehicleId: 'motorcycle-3', lane: 1, startCell: 0 },
+    ] });
+    expect(result.message).toContain('SEABROOK HARBOUR');
+    expect(result.message).not.toContain('PORT B');
+  });
+});
+
 describe('handcrafted levels', () => {
-  it('contains exactly Levels 1–10', () => {
-    expect(LEVELS.map((level) => level.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  it('contains exactly Levels 1–20', () => {
+    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 20 }, (_, index) => index + 1));
   });
 
   it('uses ordered, independently configurable balance thresholds', () => {
@@ -179,5 +260,12 @@ describe('handcrafted levels', () => {
     const solution = LevelSolver.solve(level);
     expect(solution, `Level ${level.id} should be solvable`).not.toBeNull();
     expect(LevelValidator.validate(level, solution!).valid).toBe(true);
+  });
+
+  it.each([11, 16, 20])('Level %i has a full-route solver solution', (levelId) => {
+    const level = getLevel(levelId);
+    const solution = LevelSolver.solve(level);
+    expect(solution).not.toBeNull();
+    expect(RouteSystem.simulate(level, solution!).valid).toBe(true);
   });
 });
