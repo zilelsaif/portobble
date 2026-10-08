@@ -102,6 +102,7 @@ export class GameScene extends Phaser.Scene {
     this.feedbackText = this.add.text(195, 437, 'LOAD EVERY VEHICLE', textStyle(13, '#fff7df')).setOrigin(0.5)
       .setBackgroundColor('#203e4acc').setPadding(12, 5);
     this.renderState();
+    if (DEBUG_MODE && new URLSearchParams(window.location.search).has('solve')) this.time.delayedCall(0, () => this.debugLoadSolution());
   }
 
   private drawFerry(): void {
