@@ -19,6 +19,27 @@ export interface TideRules {
   heelDraftFactor: number;
 }
 
+export interface PortPickupDefinition {
+  port: PortId;
+  vehicles: VehicleInstance[];
+}
+
+export type RoutePhase = 'loading' | 'sailing' | 'unloading' | 'pickup' | 'complete';
+
+export interface ManifestState {
+  portIndex: number;
+  phase: RoutePhase;
+  ferry: FerryState;
+  waitingVehicleIds: string[];
+  lockedVehicleIds: string[];
+  deliveredVehicleIds: string[];
+}
+
+export interface ManifestSolution {
+  stages: Array<{ port: PortId; departureState: FerryState }>;
+  finalState: ManifestState;
+}
+
 export interface VehicleDefinition {
   id: VehicleType;
   displayName: string;
@@ -72,6 +93,7 @@ export interface LevelDefinition {
   rules: LevelRules;
   route?: RouteDefinition;
   tideRules?: TideRules;
+  pickups?: PortPickupDefinition[];
 }
 
 export interface TideValidationResult {

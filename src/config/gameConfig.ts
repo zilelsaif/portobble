@@ -1,7 +1,7 @@
 export const GAME_CONFIG = {
   title: 'PORTOBBLE',
-  subtitle: 'Space • Weight • Route • Water',
-  version: 'v0.4',
+  subtitle: 'Plan • Exchange • Deliver',
+  version: 'v0.5',
   width: 390,
   height: 700,
   colors: {

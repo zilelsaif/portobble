@@ -3,7 +3,7 @@ import { DEBUG_MODE, GAME_CONFIG, REDUCED_MOTION } from '../config/gameConfig';
 import { getLevel } from '../data/levels';
 import { getVehicleDefinition } from '../data/vehicles';
 import { getPortMetadata, portFullName, portShortName } from '../data/ports';
-import type { FerryState, LaneIndex, LevelDefinition, Placement, RouteLegDefinition, VehicleInstance } from '../models/game';
+import type { FerryState, LaneIndex, LevelDefinition, ManifestState, Placement, RouteLegDefinition, VehicleInstance } from '../models/game';
 import { BalanceSystem } from '../systems/BalanceSystem';
 import { ExitSystem } from '../systems/ExitSystem';
 import { FeedbackSystem } from '../systems/FeedbackSystem';
@@ -13,6 +13,8 @@ import { SaveSystem } from '../systems/SaveSystem';
 import { ScoreSystem } from '../systems/ScoreSystem';
 import { RouteSystem } from '../systems/RouteSystem';
 import { TideSystem } from '../systems/TideSystem';
+import { ManifestSystem } from '../systems/ManifestSystem';
+import { findLevelVehicle } from '../systems/LevelVehicleCatalog';
 import { addButton, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
 
@@ -41,6 +43,9 @@ export class GameScene extends Phaser.Scene {
   private debugText?: Phaser.GameObjects.Text;
   private routeText?: Phaser.GameObjects.Text;
   private tideText?: Phaser.GameObjects.Text;
+  private objectiveText!: Phaser.GameObjects.Text;
+  private manifestState?: ManifestState;
+  private scoringState: FerryState = { placements: [] };
   private sailing = false;
 
   constructor() {
@@ -54,6 +59,8 @@ export class GameScene extends Phaser.Scene {
     this.vehicles.clear();
     this.exitCues = [];
     this.sailing = false;
+    this.manifestState = this.level.pickups?.length ? ManifestSystem.initialState(this.level) : undefined;
+    this.scoringState = { placements: [] };
   }
 
   create(): void {
@@ -74,7 +81,7 @@ export class GameScene extends Phaser.Scene {
       : this.level.hint;
     const objectivePanel = this.add.rectangle(195, 74, 350, 36, this.level.rules.priorityExit ? 0xf4eee0 : 0xe1ebe4, 0.98)
       .setStrokeStyle(2, this.level.rules.priorityExit ? GAME_CONFIG.colors.red : GAME_CONFIG.colors.green, 0.8);
-    this.add.text(195, 74, objective, textStyle(11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328);
+    this.objectiveText = this.add.text(195, 74, this.manifestState ? this.manifestForecast() : objective, textStyle(this.manifestState ? 9 : 11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328);
     objectivePanel.setDepth(1);
     this.add.text(28, 104, this.level.rules.priorityExit ? 'PRIORITY VEHICLES' : 'WAITING VEHICLES', textStyle(11, '#fff7df', 'left')).setLetterSpacing(1.1);
     this.drawFerry();
@@ -138,7 +145,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createVehicles(): void {
-    this.level.vehicles.forEach((vehicle, index) => {
+    ManifestSystem.allVehicles(this.level).forEach((vehicle, index) => {
       const definition = getVehicleDefinition(vehicle.type);
       const width = definition.length * CELL_W - 8;
       const body = this.add.graphics();
@@ -183,8 +190,10 @@ export class GameScene extends Phaser.Scene {
         const badgeLabel = this.add.text(0, 0, port.shortName, textStyle(10, `#${port.badgeTextColor.toString(16).padStart(6, '0')}`)).setOrigin(0.5);
         badge = this.add.container(vehicle.type === 'motorcycle' ? 0 : width / 2 - 21, vehicle.type === 'motorcycle' ? -30 : 1, [badgeBg, badgeLabel]).setDepth(3);
       }
-      const container = this.add.container(0, 0, badge ? [body, label, badge] : [body, label]).setSize(width, 96).setDepth(10);
+      const lock = this.add.text(-width / 2 + 12, -29, '◆', textStyle(11, '#fff4c7')).setOrigin(0.5).setBackgroundColor('#203e4a').setPadding(3, 2).setVisible(false);
+      const container = this.add.container(0, 0, badge ? [body, label, badge, lock] : [body, label, lock]).setSize(width, 96).setDepth(10);
       if (badge) container.setData('destinationBadge', badge);
+      container.setData('lockBadge', lock);
       container.setData('vehicleId', vehicle.id).setData('queueIndex', index).setInteractive({ useHandCursor: true, draggable: true });
       this.input.setDraggable(container);
       this.bindDrag(container, vehicle);
@@ -193,8 +202,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private bindDrag(container: Phaser.GameObjects.Container, vehicle: VehicleInstance): void {
+    container.on('pointerdown', () => {
+      if (this.manifestState?.lockedVehicleIds.includes(vehicle.id)) this.feedbackText.setText('THROUGH CARGO • LOCKED').setColor('#fff7df');
+    });
     container.on('dragstart', () => {
       if (this.sailing) return;
+      if (this.manifestState && !ManifestSystem.canManipulate(this.manifestState, vehicle.id)) return;
       const placement = this.state.placements.find((item) => item.vehicleId === vehicle.id);
       this.dragGhost.clear();
       if (placement) {
@@ -210,11 +223,16 @@ export class GameScene extends Phaser.Scene {
     });
     container.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number, dragY: number) => {
       if (this.sailing) return;
+      if (this.manifestState && !ManifestSystem.canManipulate(this.manifestState, vehicle.id)) return;
       container.setPosition(dragX, dragY);
       this.drawPlacementPreview(vehicle, dragX, dragY);
     });
     container.on('dragend', (pointer: Phaser.Input.Pointer) => {
       if (this.sailing) return;
+      if (this.manifestState && !ManifestSystem.canManipulate(this.manifestState, vehicle.id)) {
+        this.renderState();
+        return;
+      }
       this.placementPreview.clear();
       this.dragGhost.clear();
       const candidate = this.candidateAt(vehicle, pointer.worldX, pointer.worldY);
@@ -240,6 +258,7 @@ export class GameScene extends Phaser.Scene {
         this.feedbackText.setText('DROP ON THE FERRY DECK').setColor('#fff7df');
       }
       this.renderState(vehicle.id);
+      if (this.manifestState) this.manifestState = { ...this.manifestState, ferry: this.state };
     });
   }
 
@@ -268,9 +287,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderState(animatedVehicleId?: string): void {
-    this.level.vehicles.forEach((vehicle, index) => {
+    const visibleVehicles = this.manifestState
+      ? ManifestSystem.allVehicles(this.level).filter((vehicle) => this.manifestState!.waitingVehicleIds.includes(vehicle.id) || this.state.placements.some((placement) => placement.vehicleId === vehicle.id))
+      : this.level.vehicles;
+    ManifestSystem.allVehicles(this.level).forEach((vehicle) => {
       const container = this.vehicles.get(vehicle.id);
       if (!container) return;
+      const visibleIndex = visibleVehicles.findIndex((item) => item.id === vehicle.id);
+      if (visibleIndex < 0) {
+        container.setVisible(false).disableInteractive();
+        return;
+      }
+      container.setVisible(true).setInteractive({ useHandCursor: true, draggable: true });
+      this.input.setDraggable(container);
+      const locked = this.manifestState?.lockedVehicleIds.includes(vehicle.id) ?? false;
+      (container.getData('lockBadge') as Phaser.GameObjects.Text | undefined)?.setVisible(locked);
       const placement = this.state.placements.find((item) => item.vehicleId === vehicle.id);
       if (placement) {
         const length = getVehicleDefinition(vehicle.type).length;
@@ -282,8 +313,8 @@ export class GameScene extends Phaser.Scene {
         this.setBadgeScreenScale(container, 0.92);
         container.setDepth(10);
       } else {
-        const column = index % 3;
-        const row = Math.floor(index / 3);
+        const column = visibleIndex % 3;
+        const row = Math.floor(visibleIndex / 3);
         const targetX = 66 + column * 129;
         const targetY = 146 + row * 72;
         if (animatedVehicleId === vehicle.id && !REDUCED_MOTION) {
@@ -295,7 +326,7 @@ export class GameScene extends Phaser.Scene {
     });
     this.updateBalance(animatedVehicleId !== undefined);
     if (animatedVehicleId && !REDUCED_MOTION) {
-      const vehicle = this.level.vehicles.find((item) => item.id === animatedVehicleId);
+      const vehicle = findLevelVehicle(this.level, animatedVehicleId);
       const weight = vehicle ? getVehicleDefinition(vehicle.type).weight : 1;
       this.tweens.add({ targets: this.ferryVisual, scaleY: 1 - weight * 0.006, duration: 90, yoyo: true, ease: 'Sine.inOut' });
     }
@@ -335,12 +366,15 @@ export class GameScene extends Phaser.Scene {
       const nextPort = RouteSystem.nextPort(this.level);
       const leg = this.level.route?.legs?.[0];
       const tide = leg ? TideSystem.evaluateLeg(this.level, this.state, leg) : undefined;
-      this.debugText.setText(`bal=${result.value} load=${this.state.placements.length}/${this.level.vehicles.length}${nextPort ? ` next=${nextPort}:${portShortName(nextPort)}` : ''}${tide ? ` leg=${leg?.from}>${leg?.to} ${leg?.tide} wt=${tide.totalWeight} heel=${tide.heelDraftPenalty} draft=${tide.effectiveDraft}/${tide.maxDraft} ${tide.safe ? 'PASS' : 'FAIL'}` : ''}`);
+      const manifest = this.manifestState;
+      const future = manifest ? (this.level.pickups ?? []).filter((pickup) => (this.level.route?.ports.indexOf(pickup.port) ?? 0) > manifest.portIndex).reduce((sum, pickup) => sum + pickup.vehicles.length, 0) : 0;
+      this.debugText.setText(`bal=${result.value} load=${this.state.placements.length}/${ManifestSystem.allVehicles(this.level).length}${nextPort ? ` next=${nextPort}:${portShortName(nextPort)}` : ''}${tide ? ` leg=${leg?.from}>${leg?.to} ${leg?.tide} wt=${tide.totalWeight} heel=${tide.heelDraftPenalty} draft=${tide.effectiveDraft}/${tide.maxDraft} ${tide.safe ? 'PASS' : 'FAIL'}` : ''}${manifest ? ` port=${this.level.route?.ports[manifest.portIndex]} phase=${manifest.phase} locked=${manifest.lockedVehicleIds.join(',')} pickup=${manifest.waitingVehicleIds.join(',')} future=${future} delivered=${manifest.deliveredVehicleIds.join(',')}` : ''}`);
     }
   }
 
   private createControls(): void {
-    addButton(this, 195, 580, 202, 58, '⚓  SAIL', () => this.attemptSail(), 'primary');
+    addButton(this, this.manifestState ? 155 : 195, 580, this.manifestState ? 184 : 202, 58, '⚓  SAIL', () => this.attemptSail(), 'primary');
+    if (this.manifestState) addButton(this, 326, 580, 104, 50, 'RESTART ROUTE', () => this.restartRoute(), 'quiet');
     addButton(this, 72, 646, 108, 48, '↶  UNDO', () => this.undo(), 'secondary');
     addButton(this, 195, 646, 108, 48, '↺  RESET', () => this.resetLevel(), 'quiet');
     addButton(this, 318, 646, 108, 48, '≡  ROUTES', () => this.scene.start('LevelSelect'), 'secondary');
@@ -349,6 +383,10 @@ export class GameScene extends Phaser.Scene {
 
   private attemptSail(): void {
     if (this.sailing) return;
+    if (this.manifestState) {
+      this.attemptManifestSail();
+      return;
+    }
     Sfx.play('button');
     const validation = LevelValidator.validate(this.level, this.state);
     if (!validation.valid) {
@@ -434,7 +472,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private finishLevel(): void {
-    const stars = ScoreSystem.stars(this.level, this.state);
+    const stars = ScoreSystem.stars(this.level, this.manifestState ? this.scoringState : this.state);
     SaveSystem.recordCompletion(this.level.id, stars);
     FeedbackSystem.event('success');
     const shade = this.add.rectangle(195, 350, 390, 700, 0x102a32, 0.78).setDepth(90);
@@ -444,9 +482,9 @@ export class GameScene extends Phaser.Scene {
     this.add.text(195, 242, 'CROSSING COMPLETE', textStyle(25)).setOrigin(0.5).setDepth(92);
     addStars(this, 195, 299, stars, 43).setDepth(92);
     this.add.text(195, 347, stars === 3 ? '● PERFECTLY BALANCED' : stars === 2 ? '● GOOD BALANCE' : '● SAFE ARRIVAL', textStyle(14, '#4f765e')).setOrigin(0.5).setDepth(92);
-    const nextLevel = Math.min(30, this.level.id + 1);
-    const next = addButton(this, 195, 416, 226, 54, this.level.id === 30 ? 'HARBOUR ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
-      this.scene.start(this.level.id === 30 ? 'LevelSelect' : 'Game', this.level.id === 30 ? { chapter: 2 } : { levelId: nextLevel });
+    const nextLevel = Math.min(40, this.level.id + 1);
+    const next = addButton(this, 195, 416, 226, 54, this.level.id === 40 ? 'HARBOUR ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
+      this.scene.start(this.level.id === 40 ? 'LevelSelect' : 'Game', this.level.id === 40 ? { chapter: 3 } : { levelId: nextLevel });
     });
     next.setDepth(93);
     const retry = addButton(this, 195, 480, 168, 46, 'REPLAY', () => this.scene.restart({ levelId: this.level.id }), 'secondary');
@@ -467,6 +505,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.state.placements = previous;
+    if (this.manifestState) this.manifestState = { ...this.manifestState, ferry: this.state };
     this.feedbackText.setText('LAST MOVE UNDONE').setColor('#d9ffd6');
     FeedbackSystem.event('undo');
     this.renderState();
@@ -474,8 +513,18 @@ export class GameScene extends Phaser.Scene {
 
   private resetLevel(): void {
     if (this.sailing || this.state.placements.length === 0) return;
+    if (this.manifestState?.phase === 'pickup') {
+      this.manifestState = ManifestSystem.resetPickup({ ...this.manifestState, ferry: this.state });
+      this.state = this.manifestState.ferry;
+      this.history = [];
+      this.feedbackText.setText('CURRENT PICKUP RESET').setColor('#fff7df');
+      FeedbackSystem.event('reset');
+      this.renderState();
+      return;
+    }
     this.pushHistory();
     this.state.placements = [];
+    if (this.manifestState) this.manifestState = { ...this.manifestState, ferry: this.state };
     this.feedbackText.setText('DECK RESET').setColor('#fff7df');
     FeedbackSystem.event('reset');
     this.renderState();
@@ -536,5 +585,68 @@ export class GameScene extends Phaser.Scene {
   private pulseVehicle(vehicleId: string): void {
     const vehicle = this.vehicles.get(vehicleId);
     if (vehicle) this.tweens.add({ targets: vehicle, scaleX: 1.05, scaleY: 1.05, duration: 120, yoyo: true, repeat: 2 });
+  }
+
+  private attemptManifestSail(): void {
+    if (!this.manifestState) return;
+    this.manifestState = { ...this.manifestState, ferry: this.state };
+    const validation = ManifestSystem.validateDeparture(this.level, this.manifestState);
+    if (!validation.valid) {
+      FeedbackSystem.event('failure');
+      const messages = {
+        PICKUP_WAITING: this.manifestState.phase === 'pickup' ? 'LOAD ALL PICKUPS' : 'LOAD EVERY VEHICLE',
+        INVALID_PLACEMENT: 'INVALID DECK PLACEMENT', OVERWEIGHT: 'FERRY OVERWEIGHT', UNBALANCED: 'FERRY UNBALANCED',
+        DESTINATION_BLOCKED: 'DESTINATION VEHICLE BLOCKED', PRIORITY_BLOCKED: 'PRIORITY VEHICLE BLOCKED', TIDE_UNSAFE: 'TOO DEEP FOR NEXT TIDE',
+      } as const;
+      this.feedbackText.setText(`✕ ${messages[validation.code ?? 'INVALID_PLACEMENT']}`).setColor('#ffd0c5');
+      return;
+    }
+    this.sailing = true;
+    this.manifestState = ManifestSystem.transition(this.manifestState, 'sailing') ?? this.manifestState;
+    if (BalanceSystem.calculate(this.level, this.state).absolute >= BalanceSystem.calculate(this.level, this.scoringState).absolute) {
+      this.scoringState = { placements: this.state.placements.map((placement) => ({ ...placement })) };
+    }
+    this.feedbackText.setText('✓ MANIFEST CLEAR • DEPARTING').setColor('#d9ffd6');
+    const nextPort = this.level.route!.ports[this.manifestState.portIndex + 1]!;
+    const unloadIds = this.state.placements.filter((placement) => findLevelVehicle(this.level, placement.vehicleId)?.destination === nextPort).map((placement) => placement.vehicleId);
+    this.time.delayedCall(REDUCED_MOTION ? 1 : 450, () => {
+      if (this.manifestState) this.manifestState = ManifestSystem.transition(this.manifestState, 'unloading') ?? this.manifestState;
+      const tweens = unloadIds.flatMap((id) => {
+        const vehicle = this.vehicles.get(id);
+        return vehicle ? [{ targets: vehicle, x: 438, alpha: 0, duration: REDUCED_MOTION ? 1 : 160 }] : [];
+      });
+      this.tweens.chain({ targets: [], tweens, onComplete: () => this.enterManifestPort(nextPort) });
+    });
+  }
+
+  private enterManifestPort(port: string): void {
+    if (!this.manifestState) return;
+    this.manifestState = ManifestSystem.arrive(this.level, { ...this.manifestState, ferry: this.state });
+    this.state = this.manifestState.ferry;
+    this.history = [];
+    this.sailing = false;
+    if (this.manifestState.phase === 'complete') {
+      this.finishLevel();
+      return;
+    }
+    for (const id of this.manifestState.waitingVehicleIds) this.vehicles.get(id)?.setAlpha(1);
+    this.objectiveText.setText(`${portFullName(port).toUpperCase()} • PICKUP • ${this.manifestState.waitingVehicleIds.length} VEHICLE${this.manifestState.waitingVehicleIds.length === 1 ? '' : 'S'} WAITING`);
+    this.feedbackText.setText(ManifestSystem.canFitWaiting(this.level, this.manifestState) ? 'NEW PICKUP • THROUGH CARGO LOCKED' : `NO ROOM FOR ${portShortName(port)} PICKUP • REPLAN EARLIER LOAD`).setColor(ManifestSystem.canFitWaiting(this.level, this.manifestState) ? '#d9ffd6' : '#ffd0c5');
+    this.routeText?.setText(this.formatRoute(this.level.route?.ports[this.manifestState.portIndex + 1]));
+    const leg = this.level.route?.legs?.find((candidate) => candidate.from === port);
+    this.updateTideHud(leg);
+    this.renderState();
+  }
+
+  private restartRoute(): void {
+    this.scene.restart({ levelId: this.level.id });
+  }
+
+  private manifestForecast(): string {
+    const entries = (this.level.pickups ?? []).map((pickup) => {
+      const cargo = pickup.vehicles.map((vehicle) => `${getVehicleDefinition(vehicle.type).shortLabel}→${vehicle.destination ? portShortName(vehicle.destination) : '?'}`).join(', ');
+      return `${portShortName(pickup.port)} PICKUP: ${cargo}`;
+    });
+    return `ROUTE MANIFEST • ${entries.join(' • ')}`;
   }
 }

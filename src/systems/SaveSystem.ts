@@ -18,7 +18,7 @@ export class SaveSystem {
       if (parsed.version !== 1 || typeof parsed.highestUnlockedLevel !== 'number' || typeof parsed.stars !== 'object' || parsed.stars === null) return freshSave();
       return {
         version: 1,
-        highestUnlockedLevel: Math.max(1, Math.min(30, Math.floor(parsed.highestUnlockedLevel))),
+        highestUnlockedLevel: Math.max(1, Math.min(40, Math.floor(parsed.highestUnlockedLevel))),
         stars: Object.fromEntries(Object.entries(parsed.stars).filter(([, value]) => typeof value === 'number')),
         muted: parsed.muted === true,
       };
@@ -30,7 +30,7 @@ export class SaveSystem {
   static recordCompletion(levelId: number, stars: number): SaveData {
     const save = this.load();
     save.stars[String(levelId)] = Math.max(save.stars[String(levelId)] ?? 0, stars);
-    save.highestUnlockedLevel = Math.max(save.highestUnlockedLevel, Math.min(30, levelId + 1));
+    save.highestUnlockedLevel = Math.max(save.highestUnlockedLevel, Math.min(40, levelId + 1));
     this.write(save);
     return save;
   }
@@ -48,7 +48,7 @@ export class SaveSystem {
 
   static unlockAll(): void {
     const save = this.load();
-    save.highestUnlockedLevel = 30;
+    save.highestUnlockedLevel = 40;
     this.write(save);
   }
 

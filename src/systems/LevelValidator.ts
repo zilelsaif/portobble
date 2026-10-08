@@ -5,9 +5,17 @@ import { BalanceSystem } from './BalanceSystem';
 import { ExitSystem } from './ExitSystem';
 import { PlacementSystem } from './PlacementSystem';
 import { RouteSystem } from './RouteSystem';
+import { findLevelVehicle } from './LevelVehicleCatalog';
+import { ManifestSystem } from './ManifestSystem';
 
 export class LevelValidator {
   static validate(level: LevelDefinition, state: FerryState): LevelValidationResult {
+    if (level.pickups?.length) {
+      const manifest = ManifestSystem.initialState(level);
+      manifest.ferry = state;
+      const result = ManifestSystem.validateDeparture(level, manifest);
+      return { valid: result.valid, code: result.valid ? 'VALID' : result.code === 'PICKUP_WAITING' ? 'VEHICLE_STILL_WAITING' : result.code ?? 'INVALID_PLACEMENT', message: result.valid ? 'READY TO SAIL' : result.code === 'PICKUP_WAITING' ? 'VEHICLE STILL WAITING' : result.code ?? 'INVALID', balance: BalanceSystem.calculate(level, state).value, blockedVehicleId: result.blockedVehicleId, blockerVehicleId: result.blockerVehicleId };
+    }
     const balance = BalanceSystem.calculate(level, state);
     if (level.rules.requireAllVehicles && state.placements.length !== level.vehicles.length) {
       return { valid: false, code: 'VEHICLE_STILL_WAITING', message: 'VEHICLE STILL WAITING', balance: balance.value };
@@ -24,8 +32,8 @@ export class LevelValidator {
     const exit = ExitSystem.validateExitOrder(level, state);
     if (!exit.valid) {
       const issue = exit.issues[0];
-      const blocked = level.vehicles.find((item) => item.id === issue?.blockedVehicleId);
-      const blocker = level.vehicles.find((item) => item.id === issue?.blockerVehicleId);
+      const blocked = issue ? findLevelVehicle(level, issue.blockedVehicleId) : undefined;
+      const blocker = issue ? findLevelVehicle(level, issue.blockerVehicleId) : undefined;
       return {
         valid: false,
         code: 'PRIORITY_BLOCKED',
@@ -47,8 +55,8 @@ export class LevelValidator {
       };
     }
     if (!route.valid && route.issue) {
-      const blocked = level.vehicles.find((item) => item.id === route.issue?.blockedVehicleId);
-      const blocker = level.vehicles.find((item) => item.id === route.issue?.blockerVehicleId);
+      const blocked = route.issue ? findLevelVehicle(level, route.issue.blockedVehicleId) : undefined;
+      const blocker = route.issue ? findLevelVehicle(level, route.issue.blockerVehicleId) : undefined;
       return {
         valid: false,
         code: route.issue.code,

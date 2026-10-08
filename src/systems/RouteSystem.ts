@@ -1,5 +1,6 @@
 import type { FerryState, LevelDefinition, Placement, PortId, RouteSimulationResult } from '../models/game';
 import { TideSystem } from './TideSystem';
+import { allLevelVehicles, findLevelVehicle } from './LevelVehicleCatalog';
 
 export class RouteSystem {
   static nextPort(level: LevelDefinition): PortId | undefined {
@@ -22,7 +23,7 @@ export class RouteSystem {
         tideChecks.push(tideCheck);
         if (!tideCheck.safe) return { valid: false, stops, tideChecks, finalState: state, tideFailure: tideCheck };
       }
-      const destinationIds = new Set(level.vehicles.filter((vehicle) => vehicle.destination === port).map((vehicle) => vehicle.id));
+      const destinationIds = new Set(allLevelVehicles(level).filter((vehicle) => vehicle.destination === port).map((vehicle) => vehicle.id));
       const issue = this.validateStop(level, state, port, destinationIds);
       if (issue) return { valid: false, stops, tideChecks, finalState: state, issue };
       const unloadedVehicleIds = state.placements
@@ -36,7 +37,7 @@ export class RouteSystem {
     return { valid: state.placements.length === 0, stops, tideChecks, finalState: state };
   }
 
-  private static validateStop(level: LevelDefinition, state: FerryState, port: PortId, destinationIds: Set<string>) {
+  static validateStop(level: LevelDefinition, state: FerryState, port: PortId, destinationIds = new Set(allLevelVehicles(level).filter((vehicle) => vehicle.destination === port).map((vehicle) => vehicle.id))) {
     for (const lane of [0, 1] as const) {
       const lanePlacements = state.placements.filter((placement) => placement.lane === lane).sort((a, b) => b.startCell - a.startCell);
       for (const target of lanePlacements.filter((placement) => destinationIds.has(placement.vehicleId))) {
@@ -44,10 +45,10 @@ export class RouteSystem {
         if (blocker) return { port, code: 'DESTINATION_BLOCKED' as const, blockedVehicleId: target.vehicleId, blockerVehicleId: blocker.vehicleId };
       }
       const targetPlacements = lanePlacements.filter((placement) => destinationIds.has(placement.vehicleId));
-      for (const priority of targetPlacements.filter((placement) => (level.vehicles.find((vehicle) => vehicle.id === placement.vehicleId)?.priority ?? 0) > 0)) {
-        const priorityValue = level.vehicles.find((vehicle) => vehicle.id === priority.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+      for (const priority of targetPlacements.filter((placement) => (findLevelVehicle(level, placement.vehicleId)?.priority ?? 0) > 0)) {
+        const priorityValue = findLevelVehicle(level, priority.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
         const blocker = targetPlacements.find((placement) => {
-          const value = level.vehicles.find((vehicle) => vehicle.id === placement.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+          const value = findLevelVehicle(level, placement.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
           return placement.startCell > priority.startCell && value > priorityValue;
         });
         if (blocker) return { port, code: 'PRIORITY_BLOCKED' as const, blockedVehicleId: priority.vehicleId, blockerVehicleId: blocker.vehicleId };
@@ -57,8 +58,8 @@ export class RouteSystem {
   }
 
   private static exitSort(level: LevelDefinition, a: Placement, b: Placement): number {
-    const priorityA = level.vehicles.find((vehicle) => vehicle.id === a.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
-    const priorityB = level.vehicles.find((vehicle) => vehicle.id === b.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+    const priorityA = findLevelVehicle(level, a.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
+    const priorityB = findLevelVehicle(level, b.vehicleId)?.priority ?? Number.MAX_SAFE_INTEGER;
     if (priorityA !== priorityB) return priorityA - priorityB;
     if (a.lane !== b.lane) return a.lane - b.lane;
     return b.startCell - a.startCell;

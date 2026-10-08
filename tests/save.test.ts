@@ -28,13 +28,15 @@ describe('SaveSystem', () => {
     expect(SaveSystem.load()).toMatchObject({ highestUnlockedLevel: 2, stars: { '1': 2 } });
   });
 
-  it('preserves earlier progression, unlocks Level 21, and caps at Level 30', () => {
+  it('preserves earlier progression, unlocks new chapters, and caps at Level 40', () => {
     SaveSystem.recordCompletion(10, 3);
     expect(SaveSystem.load().highestUnlockedLevel).toBe(11);
     SaveSystem.recordCompletion(20, 3);
     expect(SaveSystem.load().highestUnlockedLevel).toBe(21);
     SaveSystem.recordCompletion(30, 3);
-    expect(SaveSystem.load().highestUnlockedLevel).toBe(30);
+    expect(SaveSystem.load().highestUnlockedLevel).toBe(31);
+    SaveSystem.recordCompletion(40, 3);
+    expect(SaveSystem.load().highestUnlockedLevel).toBe(40);
     SaveSystem.clear();
     expect(SaveSystem.load().highestUnlockedLevel).toBe(1);
   });
@@ -47,5 +49,10 @@ describe('SaveSystem', () => {
   it('preserves an accepted v0.3 Level 20 save', () => {
     localStorage.setItem('portobble-save-v1', JSON.stringify({ version: 1, highestUnlockedLevel: 20, stars: { '20': 3 }, muted: false }));
     expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 20, stars: { '20': 3 }, muted: false });
+  });
+
+  it('preserves an accepted v0.4 Level 30 save', () => {
+    localStorage.setItem('portobble-save-v1', JSON.stringify({ version: 1, highestUnlockedLevel: 30, stars: { '30': 2 }, muted: true }));
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 30, stars: { '30': 2 }, muted: true });
   });
 });

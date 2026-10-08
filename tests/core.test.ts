@@ -10,6 +10,7 @@ import { PlacementSystem } from '../src/systems/PlacementSystem';
 import { ScoreSystem } from '../src/systems/ScoreSystem';
 import { RouteSystem } from '../src/systems/RouteSystem';
 import { TideSystem } from '../src/systems/TideSystem';
+import { ManifestSystem } from '../src/systems/ManifestSystem';
 
 describe('PlacementSystem', () => {
   const level = getLevel(2);
@@ -309,9 +310,77 @@ describe('TideSystem', () => {
   });
 });
 
+describe('ManifestSystem', () => {
+  it('reports no pickup, one pickup and multiple pickups by port', () => {
+    expect(ManifestSystem.pickupsAt(getLevel(31), 'A')).toEqual([]);
+    expect(ManifestSystem.pickupsAt(getLevel(31), 'B')).toHaveLength(1);
+    expect(ManifestSystem.pickupsAt(getLevel(33), 'B')).toHaveLength(2);
+  });
+
+  it('requires every scheduled pickup before departure', () => {
+    const level = getLevel(31);
+    const firstDeparture = LevelSolver.solveManifest(level)!.stages[0]!.departureState;
+    const arrival = ManifestSystem.arrive(level, { ...ManifestSystem.initialState(level), ferry: firstDeparture });
+    expect(ManifestSystem.validateDeparture(level, arrival)).toMatchObject({ valid: false, code: 'PICKUP_WAITING' });
+    const completeStage = LevelSolver.solveManifest(level)!.stages[1]!.departureState;
+    expect(ManifestSystem.validateDeparture(level, { ...arrival, ferry: completeStage }).valid).toBe(true);
+  });
+
+  it('locks through-cargo while allowing current pickups to move and return', () => {
+    const level = getLevel(31);
+    const firstDeparture = LevelSolver.solveManifest(level)!.stages[0]!.departureState;
+    const arrival = ManifestSystem.arrive(level, { ...ManifestSystem.initialState(level), ferry: firstDeparture });
+    const lockedId = arrival.lockedVehicleIds[0]!;
+    const lockedPlacement = arrival.ferry.placements.find((placement) => placement.vehicleId === lockedId)!;
+    expect(ManifestSystem.withPlacement(arrival, { ...lockedPlacement, lane: lockedPlacement.lane === 0 ? 1 : 0 })).toBe(arrival);
+    const pickupId = arrival.waitingVehicleIds[0]!;
+    const loaded = ManifestSystem.withPlacement(arrival, { vehicleId: pickupId, lane: 0, startCell: 4 });
+    expect(loaded.ferry.placements.some((placement) => placement.vehicleId === pickupId)).toBe(true);
+    expect(ManifestSystem.returnToQueue(loaded, pickupId).ferry.placements.some((placement) => placement.vehicleId === pickupId)).toBe(false);
+  });
+
+  it('resets only current-port pickups and preserves committed cargo', () => {
+    const level = getLevel(31);
+    const solution = LevelSolver.solveManifest(level)!;
+    const arrival = ManifestSystem.arrive(level, { ...ManifestSystem.initialState(level), ferry: solution.stages[0]!.departureState });
+    const loaded = { ...arrival, ferry: solution.stages[1]!.departureState };
+    const reset = ManifestSystem.resetPickup(loaded);
+    expect(reset.ferry.placements.map((placement) => placement.vehicleId).sort()).toEqual(arrival.lockedVehicleIds.slice().sort());
+    expect(reset.lockedVehicleIds).toEqual(arrival.lockedVehicleIds);
+    expect(ManifestSystem.initialState(level).portIndex).toBe(0);
+  });
+
+  it('enforces valid phase transitions', () => {
+    const initial = ManifestSystem.initialState(getLevel(31));
+    const sailing = ManifestSystem.transition(initial, 'sailing');
+    expect(sailing?.phase).toBe('sailing');
+    const unloading = ManifestSystem.transition(sailing!, 'unloading');
+    expect(unloading?.phase).toBe('unloading');
+    expect(ManifestSystem.transition(unloading!, 'pickup')?.phase).toBe('pickup');
+    expect(ManifestSystem.transition(initial, 'pickup')).toBeNull();
+    expect(ManifestSystem.transition({ ...initial, phase: 'complete' }, 'sailing')).toBeNull();
+  });
+
+  it('rejects invalid pickup destinations and duplicate runtime IDs', () => {
+    const level = getLevel(31);
+    const invalidDestination = { ...level, pickups: [{ port: 'B', vehicles: [{ id: 'bad', type: 'car' as const, destination: 'A' }] }] };
+    expect(ManifestSystem.validateLevelData(invalidDestination)).toContain('Invalid destination for pickup bad');
+    const duplicate = { ...level, pickups: [{ port: 'B', vehicles: [{ ...level.vehicles[0]!, destination: 'C' }] }] };
+    expect(ManifestSystem.validateLevelData(duplicate).some((error) => error.startsWith('Duplicate vehicle id'))).toBe(true);
+  });
+
+  it('solves pickup destination, priority, tide and two-port integration', () => {
+    for (const levelId of [33, 35, 36, 37]) {
+      const solution = LevelSolver.solveManifest(getLevel(levelId));
+      expect(solution, `Level ${levelId} dynamic route`).not.toBeNull();
+      expect(solution?.finalState.phase).toBe('complete');
+    }
+  });
+});
+
 describe('handcrafted levels', () => {
-  it('contains exactly Levels 1–30', () => {
-    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 30 }, (_, index) => index + 1));
+  it('contains exactly Levels 1–40', () => {
+    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 40 }, (_, index) => index + 1));
   });
 
   it('uses ordered, independently configurable balance thresholds', () => {
@@ -342,5 +411,12 @@ describe('handcrafted levels', () => {
     const route = RouteSystem.simulate(level, solution!);
     expect(route.valid).toBe(true);
     expect(route.tideChecks.every((check) => check.safe)).toBe(true);
+  });
+
+  it.each([31, 32, 36, 37, 39, 40])('Dynamic Manifest Level %i has a complete multi-stage solution', (levelId) => {
+    const solution = LevelSolver.solveManifest(getLevel(levelId));
+    expect(solution).not.toBeNull();
+    expect(solution?.finalState.phase).toBe('complete');
+    expect(solution?.finalState.ferry.placements).toEqual([]);
   });
 });

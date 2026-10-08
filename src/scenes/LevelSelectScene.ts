@@ -13,14 +13,14 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   init(data: { chapter?: number }): void {
-    this.chapter = Phaser.Math.Clamp(data.chapter ?? this.chapter, 0, 2);
+    this.chapter = Phaser.Math.Clamp(data.chapter ?? this.chapter, 0, 3);
   }
 
   create(): void {
     addWaterBackdrop(this);
     addPanel(this, 195, 348, 354, 610);
     this.add.text(195, 56, 'HARBOUR ROUTES', textStyle(26)).setOrigin(0.5);
-    const chapterName = ['CHAPTER 1 • THE CROSSING', 'CHAPTER 2 • PORT HOPPER', 'CHAPTER 3 • TIDAL PASSAGE'][this.chapter]!;
+    const chapterName = ['CHAPTER 1 • THE CROSSING', 'CHAPTER 2 • PORT HOPPER', 'CHAPTER 3 • TIDAL PASSAGE', 'CHAPTER 4 • HARBOUR EXCHANGE'][this.chapter]!;
     this.add.text(195, 82, chapterName, textStyle(11, '#6b7b77')).setOrigin(0.5).setLetterSpacing(1.2);
     const save = SaveSystem.load();
     LEVELS.slice(this.chapter * 10, this.chapter * 10 + 10).forEach((level, index) => {
@@ -43,7 +43,7 @@ export class LevelSelectScene extends Phaser.Scene {
     });
     addButton(this, 50, 647, 72, 46, 'BACK', () => this.scene.start('Title'), 'secondary');
     if (this.chapter > 0) addButton(this, 140, 647, 86, 46, '← PREV', () => this.scene.restart({ chapter: this.chapter - 1 }), 'secondary');
-    if (this.chapter < 2) addButton(this, 238, 647, 86, 46, 'NEXT →', () => this.scene.restart({ chapter: this.chapter + 1 }), 'secondary');
+    if (this.chapter < 3) addButton(this, 238, 647, 86, 46, 'NEXT →', () => this.scene.restart({ chapter: this.chapter + 1 }), 'secondary');
     if (DEBUG_MODE) {
       addButton(this, 342, 647, 82, 46, 'UNLOCK', () => {
         SaveSystem.unlockAll();

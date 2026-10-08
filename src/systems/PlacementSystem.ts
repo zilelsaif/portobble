@@ -1,5 +1,6 @@
 import { getVehicleDefinition } from '../data/vehicles';
 import type { FerryState, LevelDefinition, Placement } from '../models/game';
+import { findLevelVehicle } from './LevelVehicleCatalog';
 
 export interface PlacementResult {
   valid: boolean;
@@ -8,7 +9,7 @@ export interface PlacementResult {
 
 export class PlacementSystem {
   static validate(level: LevelDefinition, state: FerryState, candidate: Placement): PlacementResult {
-    const vehicle = level.vehicles.find((item) => item.id === candidate.vehicleId);
+    const vehicle = findLevelVehicle(level, candidate.vehicleId);
     if (!vehicle) return { valid: false, reason: 'UNKNOWN_VEHICLE' };
     const definition = getVehicleDefinition(vehicle.type);
     if (candidate.lane < 0 || candidate.lane >= level.ferry.lanes || candidate.startCell < 0 || candidate.startCell + definition.length > level.ferry.cellsPerLane) {
@@ -17,7 +18,7 @@ export class PlacementSystem {
     const occupied = new Set<number>();
     for (const placement of state.placements) {
       if (placement.vehicleId === candidate.vehicleId || placement.lane !== candidate.lane) continue;
-      const other = level.vehicles.find((item) => item.id === placement.vehicleId);
+      const other = findLevelVehicle(level, placement.vehicleId);
       if (!other) continue;
       const otherLength = getVehicleDefinition(other.type).length;
       for (let cell = placement.startCell; cell < placement.startCell + otherLength; cell += 1) occupied.add(cell);

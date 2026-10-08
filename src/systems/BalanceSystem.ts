@@ -1,5 +1,6 @@
 import { getVehicleDefinition } from '../data/vehicles';
 import type { FerryState, LevelDefinition } from '../models/game';
+import { findLevelVehicle } from './LevelVehicleCatalog';
 
 export type BalanceLabel = 'PERFECT' | 'SAFE' | 'WARNING' | 'UNSAFE';
 
@@ -14,7 +15,7 @@ export class BalanceSystem {
   static calculate(level: LevelDefinition, state: FerryState): BalanceResult {
     let value = 0;
     for (const placement of state.placements) {
-      const vehicle = level.vehicles.find((item) => item.id === placement.vehicleId);
+      const vehicle = findLevelVehicle(level, placement.vehicleId);
       if (!vehicle) continue;
       const weight = getVehicleDefinition(vehicle.type).weight;
       value += placement.lane === 0 ? -weight : weight;
@@ -34,7 +35,7 @@ export class BalanceSystem {
 
   static totalWeight(level: LevelDefinition, state: FerryState): number {
     return state.placements.reduce((sum, placement) => {
-      const vehicle = level.vehicles.find((item) => item.id === placement.vehicleId);
+      const vehicle = findLevelVehicle(level, placement.vehicleId);
       return sum + (vehicle ? getVehicleDefinition(vehicle.type).weight : 0);
     }, 0);
   }
