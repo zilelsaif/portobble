@@ -15,6 +15,7 @@ import { RouteSystem } from '../systems/RouteSystem';
 import { TideSystem } from '../systems/TideSystem';
 import { ManifestSystem } from '../systems/ManifestSystem';
 import { findLevelVehicle } from '../systems/LevelVehicleCatalog';
+import { LevelSolver } from '../systems/LevelSolver';
 import { MasterySystem } from '../systems/MasterySystem';
 import { addButton, addMasteryMark, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
@@ -386,7 +387,10 @@ export class GameScene extends Phaser.Scene {
     addButton(this, this.manifestState ? 155 : 195, 580, this.manifestState ? 184 : 202, 58, 'SAIL', () => this.attemptSail(), 'primary');
     if (this.manifestState) addButton(this, 326, 580, 104, 50, 'RESTART ROUTE', () => this.restartRoute(), 'quiet');
     addButton(this, 72, 646, 108, 48, 'UNDO', () => this.undo(), 'secondary'); addButton(this, 195, 646, 108, 48, 'RESET', () => this.resetLevel(), 'quiet'); addButton(this, 318, 646, 108, 48, 'ROUTES', () => this.scene.start('LevelSelect'), 'secondary');
-    if (DEBUG_MODE) this.debugText = this.add.text(8, 682, '', textStyle(10, '#ffffff', 'left')).setAlpha(0.75);
+    if (DEBUG_MODE) {
+      this.debugText = this.add.text(8, 682, '', textStyle(10, '#ffffff', 'left')).setAlpha(0.75);
+      this.input.keyboard?.on('keydown-S', () => this.debugLoadSolution());
+    }
   }
 
   private attemptSail(): void {
@@ -674,5 +678,17 @@ export class GameScene extends Phaser.Scene {
       return `${portShortName(pickup.port)} PICKUP: ${cargo}`;
     });
     return `ROUTE MANIFEST • ${entries.join(' • ')}`;
+  }
+
+  private debugLoadSolution(): void {
+    if (!DEBUG_MODE || this.sailing) return;
+    const solution = this.manifestState
+      ? LevelSolver.solveManifest(this.level)?.stages[this.manifestState.portIndex]?.departureState
+      : LevelSolver.solve(this.level);
+    if (!solution) return;
+    this.state = { placements: solution.placements.map((placement) => ({ ...placement })) };
+    if (this.manifestState) this.manifestState = { ...this.manifestState, ferry: this.state };
+    this.feedbackText.setText('DEBUG • VERIFIED SOLUTION LOADED').setColor('#d9ffd6');
+    this.renderState();
   }
 }
