@@ -88,7 +88,7 @@ export class GameScene extends Phaser.Scene {
       : this.level.hint;
     const objectivePanel = this.add.rectangle(195, 74, 350, 36, this.level.rules.priorityExit ? 0xf4eee0 : 0xe1ebe4, 0.98)
       .setStrokeStyle(2, this.level.rules.priorityExit ? GAME_CONFIG.colors.red : GAME_CONFIG.colors.green, 0.8);
-    this.objectiveText = this.add.text(195, 74, this.manifestState ? this.manifestForecast() : objective, textStyle(this.manifestState ? 9 : 11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328);
+    this.objectiveText = this.add.text(195, 74, this.manifestState ? this.manifestForecast() : objective, textStyle(this.manifestState ? 9 : 11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328).setDepth(2);
     objectivePanel.setDepth(1);
     if (this.level.mastery) this.masteryText = this.add.text(195, 101, `MASTERY • ${MasterySystem.description(this.level.mastery)}`, textStyle(9, '#ffe09a')).setOrigin(0.5);
     this.add.text(28, this.level.mastery ? 119 : 104, this.level.rules.priorityExit ? 'PRIORITY VEHICLES' : 'WAITING VEHICLES', textStyle(11, '#fff7df', 'left')).setLetterSpacing(1.1);
