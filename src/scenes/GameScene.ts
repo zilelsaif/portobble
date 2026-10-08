@@ -3,7 +3,7 @@ import { DEBUG_MODE, GAME_CONFIG, REDUCED_MOTION } from '../config/gameConfig';
 import { getLevel } from '../data/levels';
 import { getVehicleDefinition } from '../data/vehicles';
 import { getPortMetadata, portFullName, portShortName } from '../data/ports';
-import type { FerryState, LaneIndex, LevelDefinition, ManifestState, Placement, RouteLegDefinition, VehicleInstance } from '../models/game';
+import type { AttemptMetrics, FerryState, LaneIndex, LevelDefinition, ManifestState, Placement, RouteLegDefinition, VehicleInstance } from '../models/game';
 import { BalanceSystem } from '../systems/BalanceSystem';
 import { ExitSystem } from '../systems/ExitSystem';
 import { FeedbackSystem } from '../systems/FeedbackSystem';
@@ -15,10 +15,11 @@ import { RouteSystem } from '../systems/RouteSystem';
 import { TideSystem } from '../systems/TideSystem';
 import { ManifestSystem } from '../systems/ManifestSystem';
 import { findLevelVehicle } from '../systems/LevelVehicleCatalog';
+import { MasterySystem } from '../systems/MasterySystem';
 import { addButton, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
 
-interface GameSceneData { levelId?: number }
+interface GameSceneData { levelId?: number; attemptMetrics?: AttemptMetrics }
 
 const DECK_X = 37;
 const DECK_Y = 286;
@@ -44,6 +45,8 @@ export class GameScene extends Phaser.Scene {
   private routeText?: Phaser.GameObjects.Text;
   private tideText?: Phaser.GameObjects.Text;
   private objectiveText!: Phaser.GameObjects.Text;
+  private masteryText?: Phaser.GameObjects.Text;
+  private attemptMetrics: AttemptMetrics = MasterySystem.initialMetrics();
   private manifestState?: ManifestState;
   private scoringState: FerryState = { placements: [] };
   private sailing = false;
@@ -61,6 +64,7 @@ export class GameScene extends Phaser.Scene {
     this.sailing = false;
     this.manifestState = this.level.pickups?.length ? ManifestSystem.initialState(this.level) : undefined;
     this.scoringState = { placements: [] };
+    this.attemptMetrics = data.attemptMetrics ? { ...data.attemptMetrics } : MasterySystem.initialMetrics();
   }
 
   create(): void {
@@ -83,7 +87,8 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(2, this.level.rules.priorityExit ? GAME_CONFIG.colors.red : GAME_CONFIG.colors.green, 0.8);
     this.objectiveText = this.add.text(195, 74, this.manifestState ? this.manifestForecast() : objective, textStyle(this.manifestState ? 9 : 11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328);
     objectivePanel.setDepth(1);
-    this.add.text(28, 104, this.level.rules.priorityExit ? 'PRIORITY VEHICLES' : 'WAITING VEHICLES', textStyle(11, '#fff7df', 'left')).setLetterSpacing(1.1);
+    if (this.level.mastery) this.masteryText = this.add.text(195, 101, `⚓ MASTERY • ${MasterySystem.description(this.level.mastery)}`, textStyle(9, '#ffe09a')).setOrigin(0.5);
+    this.add.text(28, this.level.mastery ? 119 : 104, this.level.rules.priorityExit ? 'PRIORITY VEHICLES' : 'WAITING VEHICLES', textStyle(11, '#fff7df', 'left')).setLetterSpacing(1.1);
     this.drawFerry();
     this.createVehicles();
     this.drawBalancePanel();
@@ -246,6 +251,7 @@ export class GameScene extends Phaser.Scene {
             this.state.placements = this.state.placements.filter((placement) => placement.vehicleId !== vehicle.id);
             this.state.placements.push(candidate);
             FeedbackSystem.placement(vehicle.type);
+            this.trackMastery(previous ? 'reposition' : 'placement');
           }
         } else {
           this.showInvalid(container, result.reason === 'OVERLAP' ? 'CELL OCCUPIED' : 'DOES NOT FIT');
@@ -254,6 +260,7 @@ export class GameScene extends Phaser.Scene {
         this.pushHistory();
         this.state.placements = this.state.placements.filter((placement) => placement.vehicleId !== vehicle.id);
         FeedbackSystem.placement(vehicle.type);
+        this.trackMastery('return');
       } else {
         this.feedbackText.setText('DROP ON THE FERRY DECK').setColor('#fff7df');
       }
@@ -473,21 +480,26 @@ export class GameScene extends Phaser.Scene {
 
   private finishLevel(): void {
     const stars = ScoreSystem.stars(this.level, this.manifestState ? this.scoringState : this.state);
+    const before = SaveSystem.load();
+    const masteryEarned = MasterySystem.evaluate(this.level.mastery, this.attemptMetrics, this.level, this.manifestState ? this.scoringState : this.state);
     SaveSystem.recordCompletion(this.level.id, stars);
+    if (masteryEarned) SaveSystem.recordMastery(this.level.id);
+    const firstChapterCompletion = this.level.id % 10 === 0 && !before.stars[String(this.level.id)];
     FeedbackSystem.event('success');
     const shade = this.add.rectangle(195, 350, 390, 700, 0x102a32, 0.78).setDepth(90);
-    const panel = addPanel(this, 195, 342, 336, 348, 91);
+    const panel = addPanel(this, 195, 350, 336, 382, 91);
     const finalPort = this.level.route?.ports.at(-1);
-    this.add.text(195, 212, finalPort ? `ARRIVED • ${portFullName(finalPort).toUpperCase()}` : 'HARBOUR ARRIVAL', textStyle(11, '#6a7b77')).setOrigin(0.5).setDepth(92).setLetterSpacing(1.3);
+    this.add.text(195, 196, firstChapterCompletion ? `CHAPTER COMPLETE • ${['THE CROSSING', 'PORT HOPPER', 'TIDAL PASSAGE', 'HARBOUR EXCHANGE', 'MASTER ROUTES'][Math.floor((this.level.id - 1) / 10)]}` : finalPort ? `ARRIVED • ${portFullName(finalPort).toUpperCase()}` : 'HARBOUR ARRIVAL', textStyle(10, '#6a7b77')).setOrigin(0.5).setDepth(92).setLetterSpacing(1.1);
     this.add.text(195, 242, 'CROSSING COMPLETE', textStyle(25)).setOrigin(0.5).setDepth(92);
     addStars(this, 195, 299, stars, 43).setDepth(92);
     this.add.text(195, 347, stars === 3 ? '● PERFECTLY BALANCED' : stars === 2 ? '● GOOD BALANCE' : '● SAFE ARRIVAL', textStyle(14, '#4f765e')).setOrigin(0.5).setDepth(92);
-    const nextLevel = Math.min(40, this.level.id + 1);
-    const next = addButton(this, 195, 416, 226, 54, this.level.id === 40 ? 'HARBOUR ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
-      this.scene.start(this.level.id === 40 ? 'LevelSelect' : 'Game', this.level.id === 40 ? { chapter: 3 } : { levelId: nextLevel });
+    if (this.level.mastery) this.add.text(195, 377, masteryEarned ? `⚓ MASTERED • ${MasterySystem.description(this.level.mastery)}` : `MASTERY NOT EARNED • ${MasterySystem.description(this.level.mastery)}`, textStyle(11, masteryEarned ? '#8b6824' : '#6a7b77')).setOrigin(0.5).setDepth(92);
+    const nextLevel = Math.min(50, this.level.id + 1);
+    const next = addButton(this, 195, 426, 226, 54, this.level.id === 50 ? 'MASTER ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
+      this.scene.start(this.level.id === 50 ? 'LevelSelect' : 'Game', this.level.id === 50 ? { chapter: 4 } : { levelId: nextLevel });
     });
     next.setDepth(93);
-    const retry = addButton(this, 195, 480, 168, 46, 'REPLAY', () => this.scene.restart({ levelId: this.level.id }), 'secondary');
+    const retry = addButton(this, 195, 491, 168, 46, masteryEarned || !this.level.mastery ? 'REPLAY' : 'TRY MASTERY', () => this.scene.restart({ levelId: this.level.id }), 'secondary');
     retry.setDepth(93);
     shade.setInteractive();
     panel.setInteractive();
@@ -505,6 +517,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.state.placements = previous;
+    this.trackMastery('undo');
     if (this.manifestState) this.manifestState = { ...this.manifestState, ferry: this.state };
     this.feedbackText.setText('LAST MOVE UNDONE').setColor('#d9ffd6');
     FeedbackSystem.event('undo');
@@ -517,6 +530,7 @@ export class GameScene extends Phaser.Scene {
       this.manifestState = ManifestSystem.resetPickup({ ...this.manifestState, ferry: this.state });
       this.state = this.manifestState.ferry;
       this.history = [];
+      this.trackMastery('reset');
       this.feedbackText.setText('CURRENT PICKUP RESET').setColor('#fff7df');
       FeedbackSystem.event('reset');
       this.renderState();
@@ -524,6 +538,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.pushHistory();
     this.state.placements = [];
+    this.trackMastery('reset');
     if (this.manifestState) this.manifestState = { ...this.manifestState, ferry: this.state };
     this.feedbackText.setText('DECK RESET').setColor('#fff7df');
     FeedbackSystem.event('reset');
@@ -531,6 +546,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showInvalid(container: Phaser.GameObjects.Container, message: string): void {
+    this.trackMastery('invalidDrop');
     this.feedbackText.setText(`✕ ${message}`).setColor('#ffd0c5');
     FeedbackSystem.event('invalid');
     this.tweens.add({ targets: container, angle: { from: -4, to: 4 }, duration: 45, yoyo: true, repeat: 3, onComplete: () => container.setAngle(0) });
@@ -639,7 +655,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private restartRoute(): void {
-    this.scene.restart({ levelId: this.level.id });
+    this.scene.restart({ levelId: this.level.id, attemptMetrics: MasterySystem.track(this.attemptMetrics, 'restart') });
+  }
+
+  private trackMastery(action: Parameters<typeof MasterySystem.track>[1]): void {
+    this.attemptMetrics = MasterySystem.track(this.attemptMetrics, action);
+    if (!this.level.mastery || !this.masteryText) return;
+    const failure = MasterySystem.failureReason(this.level.mastery, this.attemptMetrics);
+    this.masteryText.setText(failure ? `⚓ MASTERY • ✕ ${failure}` : `⚓ MASTERY • ${MasterySystem.description(this.level.mastery)}`).setColor(failure ? '#ffd0c5' : '#ffe09a');
   }
 
   private manifestForecast(): string {

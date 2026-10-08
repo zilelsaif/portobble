@@ -40,6 +40,22 @@ export interface ManifestSolution {
   finalState: ManifestState;
 }
 
+export type MasteryObjectiveType = 'noUndo' | 'noReset' | 'cleanDeck' | 'firstPlan' | 'perfectBalance' | 'limitedMoves';
+
+export interface MasteryObjective {
+  type: MasteryObjectiveType;
+  value?: number;
+}
+
+export interface AttemptMetrics {
+  undoCount: number;
+  resetCount: number;
+  restartCount: number;
+  invalidDropCount: number;
+  moveCount: number;
+  repositionCount: number;
+}
+
 export interface VehicleDefinition {
   id: VehicleType;
   displayName: string;
@@ -94,6 +110,7 @@ export interface LevelDefinition {
   route?: RouteDefinition;
   tideRules?: TideRules;
   pickups?: PortPickupDefinition[];
+  mastery?: MasteryObjective;
 }
 
 export interface TideValidationResult {

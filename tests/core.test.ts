@@ -11,6 +11,7 @@ import { ScoreSystem } from '../src/systems/ScoreSystem';
 import { RouteSystem } from '../src/systems/RouteSystem';
 import { TideSystem } from '../src/systems/TideSystem';
 import { ManifestSystem } from '../src/systems/ManifestSystem';
+import { MasterySystem } from '../src/systems/MasterySystem';
 
 describe('PlacementSystem', () => {
   const level = getLevel(2);
@@ -378,9 +379,53 @@ describe('ManifestSystem', () => {
   });
 });
 
+describe('MasterySystem', () => {
+  it('passes and fails No Undo at the exact action boundary', () => {
+    const objective = { type: 'noUndo' as const };
+    const clean = MasterySystem.initialMetrics();
+    expect(MasterySystem.evaluate(objective, clean)).toBe(true);
+    expect(MasterySystem.evaluate(objective, MasterySystem.track(clean, 'undo'))).toBe(false);
+  });
+
+  it('passes and fails No Reset for Reset and Restart Route', () => {
+    const objective = { type: 'noReset' as const };
+    const clean = MasterySystem.initialMetrics();
+    expect(MasterySystem.evaluate(objective, clean)).toBe(true);
+    expect(MasterySystem.evaluate(objective, MasterySystem.track(clean, 'reset'))).toBe(false);
+    expect(MasterySystem.evaluate(objective, MasterySystem.track(clean, 'restart'))).toBe(false);
+  });
+
+  it('tracks invalid drops independently from successful moves', () => {
+    let metrics = MasterySystem.track(MasterySystem.initialMetrics(), 'placement');
+    metrics = MasterySystem.track(metrics, 'invalidDrop');
+    expect(metrics).toMatchObject({ moveCount: 1, invalidDropCount: 1 });
+    expect(MasterySystem.evaluate({ type: 'cleanDeck' }, metrics)).toBe(false);
+  });
+
+  it('counts placement, reposition and successful return as moves', () => {
+    let metrics = MasterySystem.initialMetrics();
+    for (const action of ['placement', 'reposition', 'return'] as const) metrics = MasterySystem.track(metrics, action);
+    expect(metrics).toMatchObject({ moveCount: 3, repositionCount: 1 });
+  });
+
+  it('accepts the move-limit boundary and rejects one move above it', () => {
+    const objective = { type: 'limitedMoves' as const, value: 2 };
+    let metrics = MasterySystem.track(MasterySystem.initialMetrics(), 'placement');
+    metrics = MasterySystem.track(metrics, 'placement');
+    expect(MasterySystem.evaluate(objective, metrics)).toBe(true);
+    expect(MasterySystem.evaluate(objective, MasterySystem.track(metrics, 'return'))).toBe(false);
+  });
+
+  it('evaluates Perfect Balance against the configured non-zero threshold', () => {
+    const level = getLevel(3);
+    const perfect = { placements: [{ vehicleId: level.vehicles[0]!.id, lane: 0 as const, startCell: 0 }, { vehicleId: level.vehicles[1]!.id, lane: 1 as const, startCell: 0 }] };
+    expect(MasterySystem.evaluate({ type: 'perfectBalance' }, MasterySystem.initialMetrics(), level, perfect)).toBe(true);
+  });
+});
+
 describe('handcrafted levels', () => {
-  it('contains exactly Levels 1–40', () => {
-    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 40 }, (_, index) => index + 1));
+  it('contains exactly Levels 1–50', () => {
+    expect(LEVELS.map((level) => level.id)).toEqual(Array.from({ length: 50 }, (_, index) => index + 1));
   });
 
   it('uses ordered, independently configurable balance thresholds', () => {
@@ -418,5 +463,16 @@ describe('handcrafted levels', () => {
     expect(solution).not.toBeNull();
     expect(solution?.finalState.phase).toBe('complete');
     expect(solution?.finalState.ferry.placements).toEqual([]);
+  });
+
+  it.each([41, 44, 47, 49, 50])('Master Route Level %i has an explicit solver-verified solution', (levelId) => {
+    expect(LevelSolver.solve(getLevel(levelId))).not.toBeNull();
+  });
+
+  it('proves every configured mastery objective achievable', () => {
+    expect(LEVELS.filter((level) => level.id <= 40 && level.mastery)).toHaveLength(23);
+    for (const level of LEVELS.filter((candidate) => candidate.mastery)) {
+      expect(LevelSolver.verifyMastery(level), `Level ${level.id} mastery`).toBe(true);
+    }
   });
 });

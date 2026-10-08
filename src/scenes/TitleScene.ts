@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { GAME_CONFIG, REDUCED_MOTION } from '../config/gameConfig';
 import { SaveSystem } from '../systems/SaveSystem';
+import { LEVELS } from '../data/levels';
+import { ProgressSystem } from '../systems/ProgressSystem';
 import { addButton, addPanel, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
 
@@ -10,18 +12,23 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
+    const save = SaveSystem.load();
+    const progress = ProgressSystem.summarize(LEVELS, save);
+    const continueLevel = LEVELS.find((level) => level.id <= save.highestUnlockedLevel && !save.stars[String(level.id)]);
     addWaterBackdrop(this);
     this.drawHarbourVignette();
     this.add.text(195, 238, GAME_CONFIG.title, textStyle(43, '#fff8df')).setOrigin(0.5).setShadow(0, 4, '#0b2732', 6);
     this.add.text(195, 282, GAME_CONFIG.subtitle.toUpperCase(), textStyle(15, '#d8eee8')).setOrigin(0.5).setLetterSpacing(1.8);
-    addPanel(this, 195, 387, 278, 124);
-    this.add.text(195, 347, 'HARBOUR DISPATCH', textStyle(11, '#687b79')).setOrigin(0.5).setLetterSpacing(1.5);
-    addButton(this, 195, 397, 226, 58, 'PLAY', () => {
+    addPanel(this, 195, 405, 278, 166);
+    this.add.text(195, 340, progress.completed ? `${progress.completed}/50 LEVELS • ${progress.stars}/150 STARS • ⚓ ${progress.mastered}` : 'HARBOUR DISPATCH', textStyle(10, '#687b79')).setOrigin(0.5).setLetterSpacing(0.7);
+    addButton(this, 195, 390, 226, 56, progress.completed ? 'CONTINUE' : 'PLAY', () => {
       Sfx.play('button');
-      this.scene.start('LevelSelect');
+      if (continueLevel) this.scene.start('Game', { levelId: continueLevel.id });
+      else this.scene.start('LevelSelect', { chapter: Math.min(4, Math.floor((save.highestUnlockedLevel - 1) / 10)) });
     });
+    addButton(this, 195, 455, 168, 42, 'LEVELS', () => this.scene.start('LevelSelect'), 'secondary');
     this.add.text(195, 661, `${GAME_CONFIG.version} • MINIATURE HARBOUR EDITION`, textStyle(11, '#c4ded8')).setOrigin(0.5);
-    const sound = addButton(this, 338, 35, 88, 44, SaveSystem.load().muted ? 'SOUND ×' : 'SOUND ♪', () => {
+    const sound = addButton(this, 338, 35, 88, 44, save.muted ? 'SOUND ×' : 'SOUND ♪', () => {
       const muted = SaveSystem.toggleMuted();
       const label = sound.list.find((item) => item instanceof Phaser.GameObjects.Text) as Phaser.GameObjects.Text | undefined;
       label?.setText(muted ? 'SOUND ×' : 'SOUND ♪');

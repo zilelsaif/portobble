@@ -1,4 +1,4 @@
-import type { LevelDefinition, VehicleInstance, VehicleType } from '../models/game';
+import type { LevelDefinition, MasteryObjective, VehicleInstance, VehicleType } from '../models/game';
 
 const vehicles = (...types: Array<VehicleType | [VehicleType, number]>): VehicleInstance[] =>
   types.map((entry, index) => {
@@ -49,7 +49,7 @@ const ferry = (
   perfectBalanceThreshold,
 });
 
-export const LEVELS: LevelDefinition[] = [
+const LEVEL_DEFINITIONS: LevelDefinition[] = [
   { id: 1, title: 'First Crossing', hint: 'Drag both cars aboard, then SAIL.', ferry: ferry(4, 2, 0, 6), vehicles: vehicles('car', 'car'), rules: { requireAllVehicles: true, priorityExit: false } },
   { id: 2, title: 'Long & Short', hint: 'Vehicle length decides how many cells it needs.', ferry: ferry(5, 3, 1, 8), vehicles: vehicles('motorcycle', 'car', 'car'), rules: { requireAllVehicles: true, priorityExit: false } },
   { id: 3, title: 'Two Sides', hint: 'Use both lanes to keep the deck tidy.', ferry: ferry(2, 1, 1, 9), vehicles: vehicles('motorcycle', 'car', 'van'), rules: { requireAllVehicles: true, priorityExit: false } },
@@ -90,7 +90,29 @@ export const LEVELS: LevelDefinition[] = [
   { id: 38, title: 'Through Cargo', hint: 'The Ironhaven truck stays locked through every exchange.', ferry: ferry(4, 2, 1, 17), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 17], ['B', 'C', 'mid', 16], ['C', 'D', 'mid', 14]]), tideRules, vehicles: manifestVehicles('a', ['truck', 'D'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['van', 'C']) }, { port: 'C', vehicles: manifestVehicles('c', ['motorcycle', 'D']) }], rules: { requireAllVehicles: true, priorityExit: false } },
   { id: 39, title: 'Tidal Exchange', hint: 'Each pickup changes the load for the next passage.', ferry: ferry(3, 2, 1, 17), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 17], ['B', 'C', 'low', 13], ['C', 'D', 'low', 11]]), tideRules, vehicles: manifestVehicles('a', ['van', 'D'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['truck', 'C']) }, { port: 'C', vehicles: manifestVehicles('c', ['car', 'D'], ['motorcycle', 'D']) }], rules: { requireAllVehicles: true, priorityExit: false } },
   { id: 40, title: 'Harbour Exchange Master', hint: 'Master locked cargo, pickups, priority and Tide.', ferry: ferry(3, 2, 1, 18), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 18], ['B', 'C', 'low', 14], ['C', 'D', 'mid', 13]]), tideRules, vehicles: manifestVehicles('a', ['truck', 'D'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['ambulance', 'C', 1], ['motorcycle', 'D']) }, { port: 'C', vehicles: manifestVehicles('c', ['van', 'D']) }], rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 41, title: 'Balance Masterclass', hint: 'Tight balance and destination order leave no wasted space.', ferry: ferry(2, 1, 1, 16), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['truck', 'D'], ['car', 'B'], ['van', 'C'], ['motorcycle', 'B'], ['car', 'D']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 42, title: 'Destination Stack', hint: 'Stack both lanes so each destination clears in sequence.', ferry: ferry(3, 2, 1, 16), route: route('A', 'B', 'C', 'D'), vehicles: routedVehicles(['van', 'B'], ['car', 'B'], ['truck', 'D'], ['car', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 43, title: 'Tidal Precision', hint: 'Plan each unload for the shallow legs that follow.', ferry: ferry(2, 1, 0, 15), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 16], ['B', 'C', 'low', 10], ['C', 'D', 'low', 10]]), tideRules, vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['van', 'C'], ['truck', 'D'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 44, title: 'Harbour Exchange', hint: 'Transform the deck around locked cargo at Seabrook and Marlow.', ferry: ferry(4, 2, 1, 17), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 17], ['B', 'C', 'mid', 15], ['C', 'D', 'mid', 13]]), tideRules, vehicles: manifestVehicles('a', ['truck', 'D'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['van', 'C']) }, { port: 'C', vehicles: manifestVehicles('c', ['car', 'D']) }], rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 45, title: 'Priority Route', hint: 'Protect the ambulance exit across a shallow destination route.', ferry: ferry(3, 2, 1, 16), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'low', 14], ['B', 'C', 'mid', 12], ['C', 'D', 'mid', 10]]), tideRules, vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['truck', 'D'], ['van', 'C'], ['motorcycle', 'D']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 46, title: 'Full Manifest', hint: 'Reserve space for two exchanges while through-cargo stays locked.', ferry: ferry(4, 2, 1, 18), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 18], ['B', 'C', 'mid', 16], ['C', 'D', 'mid', 14]]), tideRules, vehicles: manifestVehicles('a', ['truck', 'D'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['van', 'C'], ['motorcycle', 'D']) }, { port: 'C', vehicles: manifestVehicles('c', ['car', 'D']) }], rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 47, title: 'Shallow Exchange', hint: 'Rebalance the heavy pickup before the low-water crossing.', ferry: ferry(3, 1, 0, 17), route: tidalRoute(['A', 'B', 'C'], [['A', 'B', 'high', 17], ['B', 'C', 'low', 13]]), tideRules, vehicles: manifestVehicles('a', ['van', 'C'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['truck', 'C'], ['motorcycle', 'C']) }], rules: { requireAllVehicles: true, priorityExit: false } },
+  { id: 48, title: 'Three-Port Pressure', hint: 'Balance destination groups, Tide and priority over four ports.', ferry: ferry(3, 2, 1, 17), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 17], ['B', 'C', 'low', 12], ['C', 'D', 'mid', 11]]), tideRules, vehicles: routedVehicles(['ambulance', 'B', 1], ['car', 'B'], ['truck', 'D'], ['van', 'C'], ['motorcycle', 'C']), rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 49, title: 'Master Logistics', hint: 'Coordinate priority, Tide and both exchanges without crowding the ramp.', ferry: ferry(3, 2, 1, 18), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 18], ['B', 'C', 'low', 14], ['C', 'D', 'mid', 12]]), tideRules, vehicles: manifestVehicles('a', ['truck', 'D'], ['car', 'B']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['ambulance', 'C', 1], ['motorcycle', 'D']) }, { port: 'C', vehicles: manifestVehicles('c', ['car', 'D']) }], rules: { requireAllVehicles: true, priorityExit: true } },
+  { id: 50, title: 'Portobble Finale', hint: 'Read the whole route, reserve pickup space and master every constraint.', ferry: ferry(3, 2, 1, 18), route: tidalRoute(['A', 'B', 'C', 'D'], [['A', 'B', 'high', 18], ['B', 'C', 'low', 14], ['C', 'D', 'low', 12]]), tideRules, vehicles: manifestVehicles('a', ['truck', 'D'], ['ambulance', 'B', 1], ['car', 'C']), pickups: [{ port: 'B', vehicles: manifestVehicles('b', ['van', 'C'], ['motorcycle', 'D']) }, { port: 'C', vehicles: manifestVehicles('c', ['car', 'D']) }], rules: { requireAllVehicles: true, priorityExit: true } },
 ];
+
+const MASTERY_BY_LEVEL: Record<number, MasteryObjective> = {
+  1: { type: 'noUndo' }, 2: { type: 'firstPlan' }, 4: { type: 'perfectBalance' }, 6: { type: 'cleanDeck' }, 7: { type: 'noUndo' },
+  10: { type: 'perfectBalance' }, 11: { type: 'firstPlan' }, 12: { type: 'cleanDeck' }, 15: { type: 'perfectBalance' }, 16: { type: 'noReset' },
+  20: { type: 'cleanDeck' }, 21: { type: 'perfectBalance' }, 23: { type: 'noUndo' }, 25: { type: 'noUndo' }, 26: { type: 'cleanDeck' },
+  30: { type: 'noReset' }, 31: { type: 'limitedMoves', value: 3 }, 33: { type: 'limitedMoves', value: 4 }, 35: { type: 'noReset' }, 36: { type: 'cleanDeck' },
+  37: { type: 'limitedMoves', value: 4 }, 39: { type: 'noUndo' }, 40: { type: 'noReset' },
+  41: { type: 'perfectBalance' }, 42: { type: 'cleanDeck' }, 43: { type: 'noUndo' }, 44: { type: 'limitedMoves', value: 4 }, 45: { type: 'cleanDeck' },
+  46: { type: 'noReset' }, 47: { type: 'limitedMoves', value: 4 }, 48: { type: 'firstPlan' }, 49: { type: 'limitedMoves', value: 6 }, 50: { type: 'noUndo' },
+};
+
+export const LEVELS: LevelDefinition[] = LEVEL_DEFINITIONS.map((level) => ({ ...level, mastery: MASTERY_BY_LEVEL[level.id] }));
 
 export function getLevel(levelId: number): LevelDefinition {
   const level = LEVELS.find((candidate) => candidate.id === levelId);

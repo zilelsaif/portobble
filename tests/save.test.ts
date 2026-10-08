@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SaveSystem } from '../src/systems/SaveSystem';
+import { ProgressSystem } from '../src/systems/ProgressSystem';
+import { LEVELS } from '../src/data/levels';
 
 class MemoryStorage implements Storage {
   private values = new Map<string, string>();
@@ -17,9 +19,9 @@ describe('SaveSystem', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('recovers safely from missing or corrupt save data', () => {
-    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 1, stars: {}, muted: false });
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 1, stars: {}, mastery: {}, muted: false });
     localStorage.setItem('portobble-save-v1', '{broken');
-    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 1, stars: {}, muted: false });
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 1, stars: {}, mastery: {}, muted: false });
   });
 
   it('unlocks the next level and preserves the best star result', () => {
@@ -28,7 +30,7 @@ describe('SaveSystem', () => {
     expect(SaveSystem.load()).toMatchObject({ highestUnlockedLevel: 2, stars: { '1': 2 } });
   });
 
-  it('preserves earlier progression, unlocks new chapters, and caps at Level 40', () => {
+  it('unlocks Level 41 and caps progression at Level 50', () => {
     SaveSystem.recordCompletion(10, 3);
     expect(SaveSystem.load().highestUnlockedLevel).toBe(11);
     SaveSystem.recordCompletion(20, 3);
@@ -36,23 +38,48 @@ describe('SaveSystem', () => {
     SaveSystem.recordCompletion(30, 3);
     expect(SaveSystem.load().highestUnlockedLevel).toBe(31);
     SaveSystem.recordCompletion(40, 3);
-    expect(SaveSystem.load().highestUnlockedLevel).toBe(40);
+    expect(SaveSystem.load().highestUnlockedLevel).toBe(41);
+    SaveSystem.recordCompletion(50, 3);
+    expect(SaveSystem.load().highestUnlockedLevel).toBe(50);
     SaveSystem.clear();
     expect(SaveSystem.load().highestUnlockedLevel).toBe(1);
   });
 
   it('preserves v0.2 stars, mute and progression data', () => {
     localStorage.setItem('portobble-save-v1', JSON.stringify({ version: 1, highestUnlockedLevel: 10, stars: { '1': 3, '10': 2 }, muted: true }));
-    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 10, stars: { '1': 3, '10': 2 }, muted: true });
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 10, stars: { '1': 3, '10': 2 }, mastery: {}, muted: true });
   });
 
   it('preserves an accepted v0.3 Level 20 save', () => {
     localStorage.setItem('portobble-save-v1', JSON.stringify({ version: 1, highestUnlockedLevel: 20, stars: { '20': 3 }, muted: false }));
-    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 20, stars: { '20': 3 }, muted: false });
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 20, stars: { '20': 3 }, mastery: {}, muted: false });
   });
 
   it('preserves an accepted v0.4 Level 30 save', () => {
     localStorage.setItem('portobble-save-v1', JSON.stringify({ version: 1, highestUnlockedLevel: 30, stars: { '30': 2 }, muted: true }));
-    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 30, stars: { '30': 2 }, muted: true });
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 30, stars: { '30': 2 }, mastery: {}, muted: true });
+  });
+
+  it('preserves an accepted v0.5 Level 40 save and initializes mastery safely', () => {
+    localStorage.setItem('portobble-save-v1', JSON.stringify({ version: 1, highestUnlockedLevel: 40, stars: { '40': 3 }, muted: true }));
+    expect(SaveSystem.load()).toEqual({ version: 1, highestUnlockedLevel: 40, stars: { '40': 3 }, mastery: {}, muted: true });
+  });
+
+  it('persists mastery permanently across lower-quality replays', () => {
+    SaveSystem.recordMastery(1);
+    SaveSystem.recordCompletion(1, 3);
+    SaveSystem.recordCompletion(1, 1);
+    expect(SaveSystem.load()).toMatchObject({ stars: { '1': 3 }, mastery: { '1': true } });
+  });
+
+  it('calculates total stars, mastery, chapter completion and chapter mastery', () => {
+    for (let id = 1; id <= 10; id += 1) SaveSystem.recordCompletion(id, id === 1 ? 3 : 1);
+    for (const level of LEVELS.slice(0, 10).filter((item) => item.mastery)) SaveSystem.recordMastery(level.id);
+    const save = SaveSystem.load();
+    const overall = ProgressSystem.summarize(LEVELS, save);
+    expect(overall).toMatchObject({ completed: 10, stars: 12, mastered: 6 });
+    expect(ProgressSystem.chapterComplete(LEVELS, save, 0)).toBe(true);
+    expect(ProgressSystem.chapterMastered(LEVELS, save, 0)).toBe(true);
+    expect(ProgressSystem.chapterComplete(LEVELS, save, 1)).toBe(false);
   });
 });
