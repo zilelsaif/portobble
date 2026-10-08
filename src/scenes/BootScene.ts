@@ -5,7 +5,7 @@ export class BootScene extends Phaser.Scene {
   constructor() {
     super('Boot');
   }
-  preload(): void { this.load.image('title-hero', 'assets/branding/portobble-title-hero.png'); }
+  preload(): void { this.load.image('title-hero', 'assets/branding/portobble-title-hero.webp'); }
 
   create(): void {
     const requestedLevel = Number(new URLSearchParams(window.location.search).get('level'));
