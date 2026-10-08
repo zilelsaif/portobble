@@ -16,8 +16,9 @@ import { TideSystem } from '../systems/TideSystem';
 import { ManifestSystem } from '../systems/ManifestSystem';
 import { findLevelVehicle } from '../systems/LevelVehicleCatalog';
 import { MasterySystem } from '../systems/MasterySystem';
-import { addButton, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
+import { addButton, addMasteryMark, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
+import { JourneyPresentation } from '../views/JourneyPresentation';
 
 interface GameSceneData { levelId?: number; attemptMetrics?: AttemptMetrics }
 
@@ -50,6 +51,7 @@ export class GameScene extends Phaser.Scene {
   private manifestState?: ManifestState;
   private scoringState: FerryState = { placements: [] };
   private sailing = false;
+  private journey!: JourneyPresentation;
 
   constructor() {
     super('Game');
@@ -68,7 +70,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    addWaterBackdrop(this);
+    addWaterBackdrop(this, false);
+    this.journey = new JourneyPresentation(this, this.level.route?.startPort ?? 'A');
     this.add.rectangle(195, 27, 390, 54, GAME_CONFIG.colors.navy, 0.96);
     this.add.text(19, 14, `ROUTE ${String(this.level.id).padStart(2, '0')}`, textStyle(12, '#d7e7df', 'left')).setLetterSpacing(1.4);
     this.add.text(19, 31, this.level.title.toUpperCase(), textStyle(18, '#fff7df', 'left'));
@@ -87,7 +90,7 @@ export class GameScene extends Phaser.Scene {
       .setStrokeStyle(2, this.level.rules.priorityExit ? GAME_CONFIG.colors.red : GAME_CONFIG.colors.green, 0.8);
     this.objectiveText = this.add.text(195, 74, this.manifestState ? this.manifestForecast() : objective, textStyle(this.manifestState ? 9 : 11, this.level.rules.priorityExit ? '#8f3638' : '#355c48')).setOrigin(0.5).setWordWrapWidth(328);
     objectivePanel.setDepth(1);
-    if (this.level.mastery) this.masteryText = this.add.text(195, 101, `⚓ MASTERY • ${MasterySystem.description(this.level.mastery)}`, textStyle(9, '#ffe09a')).setOrigin(0.5);
+    if (this.level.mastery) this.masteryText = this.add.text(195, 101, `MASTERY • ${MasterySystem.description(this.level.mastery)}`, textStyle(9, '#ffe09a')).setOrigin(0.5);
     this.add.text(28, this.level.mastery ? 119 : 104, this.level.rules.priorityExit ? 'PRIORITY VEHICLES' : 'WAITING VEHICLES', textStyle(11, '#fff7df', 'left')).setLetterSpacing(1.1);
     this.drawFerry();
     this.createVehicles();
@@ -185,7 +188,7 @@ export class GameScene extends Phaser.Scene {
             .lineBetween(-width / 2 + 37, top + 5, -width / 2 + 37, top + height - 5);
         }
       }
-      const label = this.add.text(0, vehicle.type === 'ambulance' ? -35 : -5, vehicle.priority ? `◆ PRIORITY` : definition.shortLabel, textStyle(9, '#fff8e8')).setOrigin(0.5);
+      const label = this.add.text(0, vehicle.type === 'ambulance' ? -35 : -5, vehicle.priority ? 'PRIORITY' : definition.shortLabel, textStyle(9, '#fff8e8')).setOrigin(0.5);
       if (vehicle.priority) label.setBackgroundColor('#9d3f42').setPadding(5, 2);
       let badge: Phaser.GameObjects.Container | undefined;
       if (vehicle.destination) {
@@ -195,7 +198,7 @@ export class GameScene extends Phaser.Scene {
         const badgeLabel = this.add.text(0, 0, port.shortName, textStyle(10, `#${port.badgeTextColor.toString(16).padStart(6, '0')}`)).setOrigin(0.5);
         badge = this.add.container(vehicle.type === 'motorcycle' ? 0 : width / 2 - 21, vehicle.type === 'motorcycle' ? -30 : 1, [badgeBg, badgeLabel]).setDepth(3);
       }
-      const lock = this.add.text(-width / 2 + 12, -29, '◆', textStyle(11, '#fff4c7')).setOrigin(0.5).setBackgroundColor('#203e4a').setPadding(3, 2).setVisible(false);
+      const lock = this.add.text(-width / 2 + 15, -29, 'LOCK', textStyle(7, '#fff4c7')).setOrigin(0.5).setBackgroundColor('#203e4a').setPadding(4, 2).setVisible(false);
       const container = this.add.container(0, 0, badge ? [body, label, badge, lock] : [body, label, lock]).setSize(width, 96).setDepth(10);
       if (badge) container.setData('destinationBadge', badge);
       container.setData('lockBadge', lock);
@@ -380,11 +383,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createControls(): void {
-    addButton(this, this.manifestState ? 155 : 195, 580, this.manifestState ? 184 : 202, 58, '⚓  SAIL', () => this.attemptSail(), 'primary');
+    addButton(this, this.manifestState ? 155 : 195, 580, this.manifestState ? 184 : 202, 58, 'SAIL', () => this.attemptSail(), 'primary');
     if (this.manifestState) addButton(this, 326, 580, 104, 50, 'RESTART ROUTE', () => this.restartRoute(), 'quiet');
-    addButton(this, 72, 646, 108, 48, '↶  UNDO', () => this.undo(), 'secondary');
-    addButton(this, 195, 646, 108, 48, '↺  RESET', () => this.resetLevel(), 'quiet');
-    addButton(this, 318, 646, 108, 48, '≡  ROUTES', () => this.scene.start('LevelSelect'), 'secondary');
+    addButton(this, 72, 646, 108, 48, 'UNDO', () => this.undo(), 'secondary'); addButton(this, 195, 646, 108, 48, 'RESET', () => this.resetLevel(), 'quiet'); addButton(this, 318, 646, 108, 48, 'ROUTES', () => this.scene.start('LevelSelect'), 'secondary');
     if (DEBUG_MODE) this.debugText = this.add.text(8, 682, '', textStyle(10, '#ffffff', 'left')).setAlpha(0.75);
   }
 
@@ -453,7 +454,10 @@ export class GameScene extends Phaser.Scene {
       this.finishLevel();
       return;
     }
-    this.routeText?.setText(this.formatRoute(stop.port));
+    this.feedbackText.setText(`OPEN WATER • APPROACHING ${portFullName(stop.port).toUpperCase()}`).setColor('#d9ffd6'); this.journey.travelTo(stop.port,()=>this.animateRouteArrival(stops,index));
+  }
+  private animateRouteArrival(stops: ReturnType<typeof RouteSystem.simulate>['stops'], index: number): void {
+    const stop=stops[index]; if(!stop)return; this.routeText?.setText(this.formatRoute(stop.port));
     const departingLeg = this.level.route?.legs?.find((leg) => leg.from === stop.port);
     this.updateTideHud(departingLeg);
     this.feedbackText.setText(`${portFullName(stop.port).toUpperCase()} • UNLOADING ${stop.unloadedVehicleIds.length}`).setColor('#d9ffd6');
@@ -493,7 +497,7 @@ export class GameScene extends Phaser.Scene {
     this.add.text(195, 242, 'CROSSING COMPLETE', textStyle(25)).setOrigin(0.5).setDepth(92);
     addStars(this, 195, 299, stars, 43).setDepth(92);
     this.add.text(195, 347, stars === 3 ? '● PERFECTLY BALANCED' : stars === 2 ? '● GOOD BALANCE' : '● SAFE ARRIVAL', textStyle(14, '#4f765e')).setOrigin(0.5).setDepth(92);
-    if (this.level.mastery) this.add.text(195, 377, masteryEarned ? `⚓ MASTERED • ${MasterySystem.description(this.level.mastery)}` : `MASTERY NOT EARNED • ${MasterySystem.description(this.level.mastery)}`, textStyle(11, masteryEarned ? '#8b6824' : '#6a7b77')).setOrigin(0.5).setDepth(92);
+    if (this.level.mastery) { if(masteryEarned)addMasteryMark(this,83,377,17).setDepth(92); this.add.text(195,377,masteryEarned?`MASTERED • ${MasterySystem.description(this.level.mastery)}`:`MASTERY NOT EARNED • ${MasterySystem.description(this.level.mastery)}`,textStyle(11,masteryEarned?'#8b6824':'#6a7b77')).setOrigin(.5).setDepth(92); }
     const nextLevel = Math.min(50, this.level.id + 1);
     const next = addButton(this, 195, 426, 226, 54, this.level.id === 50 ? 'MASTER ROUTES' : `NEXT • ROUTE ${nextLevel}`, () => {
       this.scene.start(this.level.id === 50 ? 'LevelSelect' : 'Game', this.level.id === 50 ? { chapter: 4 } : { levelId: nextLevel });
@@ -586,8 +590,7 @@ export class GameScene extends Phaser.Scene {
       this.tideText.setText('ROUTE CLEAR');
       return;
     }
-    const icon = leg.tide === 'high' ? '▲' : leg.tide === 'low' ? '▼' : '◆';
-    this.tideText.setText(`${icon} ${leg.tide.toUpperCase()} TIDE • ${portShortName(leg.from)}→${portShortName(leg.to)}`);
+    this.tideText.setText(`${leg.tide.toUpperCase()} TIDE • ${portShortName(leg.from)}→${portShortName(leg.to)}`);
   }
 
   private showTideFailure(failure: NonNullable<ReturnType<typeof LevelValidator.validate>['tideFailure']>): void {
@@ -625,7 +628,7 @@ export class GameScene extends Phaser.Scene {
     this.feedbackText.setText('✓ MANIFEST CLEAR • DEPARTING').setColor('#d9ffd6');
     const nextPort = this.level.route!.ports[this.manifestState.portIndex + 1]!;
     const unloadIds = this.state.placements.filter((placement) => findLevelVehicle(this.level, placement.vehicleId)?.destination === nextPort).map((placement) => placement.vehicleId);
-    this.time.delayedCall(REDUCED_MOTION ? 1 : 450, () => {
+    Sfx.play('horn'); this.journey.travelTo(nextPort, () => {
       if (this.manifestState) this.manifestState = ManifestSystem.transition(this.manifestState, 'unloading') ?? this.manifestState;
       const tweens = unloadIds.flatMap((id) => {
         const vehicle = this.vehicles.get(id);
@@ -662,7 +665,7 @@ export class GameScene extends Phaser.Scene {
     this.attemptMetrics = MasterySystem.track(this.attemptMetrics, action);
     if (!this.level.mastery || !this.masteryText) return;
     const failure = MasterySystem.failureReason(this.level.mastery, this.attemptMetrics);
-    this.masteryText.setText(failure ? `⚓ MASTERY • ✕ ${failure}` : `⚓ MASTERY • ${MasterySystem.description(this.level.mastery)}`).setColor(failure ? '#ffd0c5' : '#ffe09a');
+    this.masteryText.setText(failure?`MASTERY • FAILED • ${failure}`:`MASTERY • ${MasterySystem.description(this.level.mastery)}`).setColor(failure?'#ffd0c5':'#ffe09a');
   }
 
   private manifestForecast(): string {

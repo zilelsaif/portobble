@@ -1,7 +1,7 @@
 export const GAME_CONFIG = {
   title: 'PORTOBBLE',
-  subtitle: 'Plan • Master • Deliver',
-  version: 'v0.6',
+  subtitle: 'Maritime Logistics Puzzles',
+  version: 'v0.7',
   width: 390,
   height: 700,
   colors: {

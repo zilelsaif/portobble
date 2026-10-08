@@ -1,4 +1,4 @@
-# PORTOBBLE v0.6
+# PORTOBBLE v0.7
 
 PORTOBBLE is a portrait-first ferry logistics puzzle set in a stylized miniature harbour. A successful load must fit on the deck, balance the ferry, and let priority vehicles reach an exit in the required order.
 
@@ -9,6 +9,8 @@ Levels 21–30 add deterministic water clearance. Each route leg has a fixed tid
 Levels 31–40 add deterministic intermediate-port pickups. Through-cargo remains locked in place while newly scheduled vehicles are loaded, so the initial arrangement must reserve space for the complete published route manifest.
 
 Levels 41–50 form Chapter 5, Master Routes, combining the existing balance, destination, Tide, priority and Dynamic Manifest rules into advanced handcrafted routes. Select levels now include one optional mastery objective. Mastery is tracked separately from stars and persists permanently once earned.
+
+v0.7 introduces a production maritime visual system: a restrained navy/teal/cream palette, upgraded title artwork, distinct modular harbour environments, layered water, unified UI elevation and a short relative-motion journey sequence in which the old harbour leaves, open water appears and the destination harbour approaches.
 
 ## Requirements
 

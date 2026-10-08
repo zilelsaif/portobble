@@ -3,8 +3,9 @@ import { GAME_CONFIG, DEBUG_MODE } from '../config/gameConfig';
 import { LEVELS } from '../data/levels';
 import { SaveSystem } from '../systems/SaveSystem';
 import { ProgressSystem } from '../systems/ProgressSystem';
-import { addButton, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
+import { addButton, addMasteryMark, addPanel, addStars, addWaterBackdrop, textStyle } from '../ui/theme';
 import { Sfx } from '../utils/Sfx';
+import { HarbourView } from '../views/HarbourView';
 
 export class LevelSelectScene extends Phaser.Scene {
   private chapter = 0;
@@ -18,7 +19,7 @@ export class LevelSelectScene extends Phaser.Scene {
   }
 
   create(): void {
-    addWaterBackdrop(this);
+    addWaterBackdrop(this,false); new HarbourView(this,(['A','B','C','D','D'] as const)[this.chapter]!); this.add.rectangle(195,350,390,700,0x071d27,.32);
     addPanel(this, 195, 348, 354, 610);
     this.add.text(195, 56, 'HARBOUR ROUTES', textStyle(26)).setOrigin(0.5);
     const chapterName = ['CHAPTER 1 • THE CROSSING', 'CHAPTER 2 • PORT HOPPER', 'CHAPTER 3 • TIDAL PASSAGE', 'CHAPTER 4 • HARBOUR EXCHANGE', 'CHAPTER 5 • MASTER ROUTES'][this.chapter]!;
@@ -44,9 +45,9 @@ export class LevelSelectScene extends Phaser.Scene {
       if (!unlocked) button.disableInteractive().setAlpha(0.7);
       if (stars > 0) addStars(this, x, y + 18, stars, 11);
       else this.add.text(x, y + 18, unlocked ? level.title : 'Finish prior route', textStyle(9, unlocked ? '#d9eee5' : '#e7e7e2')).setOrigin(0.5);
-      if (save.mastery[String(level.id)]) this.add.text(x + 53, y + 18, '⚓', textStyle(11, '#ffe09a')).setOrigin(0.5);
+      if(save.mastery[String(level.id)])addMasteryMark(this,x+53,y+19,13);
     });
-    if (ProgressSystem.chapterMastered(LEVELS, save, this.chapter)) this.add.text(195, 576, '⚓ CHAPTER MASTERED', textStyle(10, '#8b6824')).setOrigin(0.5);
+    if(ProgressSystem.chapterMastered(LEVELS,save,this.chapter))this.add.text(195,576,'CHAPTER MASTERED',textStyle(10,'#8b6824')).setOrigin(.5);
     this.add.text(195, 605, `PORTOBBLE • ${overall.completed}/${overall.total} LEVELS • ${overall.stars}/${overall.maximumStars} STARS • ${overall.mastered}/${overall.masteryTotal} MASTERY`, textStyle(8, '#526d67')).setOrigin(0.5);
     addButton(this, 50, 647, 72, 46, 'BACK', () => this.scene.start('Title'), 'secondary');
     if (this.chapter > 0) addButton(this, 140, 647, 86, 46, '← PREV', () => this.scene.restart({ chapter: this.chapter - 1 }), 'secondary');
