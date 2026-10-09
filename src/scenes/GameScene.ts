@@ -112,42 +112,12 @@ export class GameScene extends Phaser.Scene {
   private drawFerry(): void {
     this.wake = this.add.graphics({ x: 195, y: DECK_Y + CELL_H }).setAlpha(0);
     this.wake.lineStyle(5, GAME_CONFIG.colors.foam, 0.6).lineBetween(-178, 72, -245, 95).lineBetween(-178, 51, -258, 54);
-    const shadow = this.add.graphics();
-    shadow.fillStyle(0x0a2731, 0.32).fillEllipse(0, 16, 360, 156);
-    const hull = this.add.graphics();
-    hull.fillStyle(0x213c46).fillTriangle(-174, 54, 174, 54, 143, 84).fillTriangle(-174, 54, -143, 84, 143, 84);
-    hull.fillStyle(0xe8ddc4).fillRoundedRect(-174, -70, 348, 135, 22);
-    hull.fillStyle(0xd98245).fillRect(-166, 42, 332, 8);
-    hull.lineStyle(3, 0x17313a).strokeRoundedRect(-174, -70, 348, 135, 22);
-    hull.lineStyle(2, 0x6f7c77, 0.75).lineBetween(-156, -58, -156, 52).lineBetween(156, -58, 156, 52);
-    const deck = this.add.graphics();
-    for (let lane = 0; lane < 2; lane += 1) {
-      for (let cell = 0; cell < 5; cell += 1) {
-        const x = DECK_X + cell * CELL_W - 195;
-        const y = DECK_Y + lane * CELL_H - (DECK_Y + CELL_H);
-        deck.fillStyle(0xf6efda, 0.96).fillRoundedRect(x + 2, y + 2, CELL_W - 4, CELL_H - 5, 5);
-        deck.lineStyle(1, 0x82908a, 0.45).strokeRoundedRect(x + 2, y + 2, CELL_W - 4, CELL_H - 5, 5);
-      }
-      deck.lineStyle(3, 0xd8ad49, 0.5).lineBetween(-150, lane * CELL_H - 24, 140, lane * CELL_H - 24);
-      for (let arrowX = -105; arrowX < 130; arrowX += 74) {
-        deck.fillStyle(0x49616a, 0.22).fillTriangle(arrowX, lane * CELL_H - 32, arrowX + 14, lane * CELL_H - 24, arrowX, lane * CELL_H - 16);
-      }
-    }
-    const rail = this.add.graphics();
-    rail.lineStyle(3, 0x304d56, 0.9).lineBetween(-158, -63, 142, -63).lineBetween(-158, 61, 142, 61);
-    for (let x = -155; x < 150; x += 38) rail.lineBetween(x, -67, x, -58).lineBetween(x, 57, x, 66);
-    const cabin = this.add.graphics();
-    cabin.fillStyle(0xfffbef).fillRoundedRect(-169, -89, 62, 30, 6);
-    cabin.fillStyle(0x385f69).fillRect(-158, -81, 13, 10).fillRect(-140, -81, 13, 10).fillRect(-122, -81, 8, 10);
-    cabin.fillStyle(0xd98245).fillRect(-151, -96, 23, 7);
-    this.ramp = this.add.graphics();
-    this.ramp.fillStyle(0xb7aa8e).fillRoundedRect(147, -57, 31, 115, 5);
-    this.ramp.lineStyle(3, 0x17313a).strokeRoundedRect(147, -57, 31, 115, 5);
-    this.ramp.lineStyle(2, 0xf6efda, 0.75).lineBetween(153, -27, 172, -27).lineBetween(153, 27, 172, 27);
+    const ferry = this.add.image(0, 0, 'ferry').setDisplaySize(360, 180);
+    this.ramp = this.add.graphics().setVisible(false);
     const exitA = this.add.text(159, -25, 'EXIT  →', textStyle(10, '#fff7df')).setOrigin(0.5);
     const exitB = this.add.text(159, 29, 'EXIT  →', textStyle(10, '#fff7df')).setOrigin(0.5);
-    this.exitCues = [exitA, exitB, this.ramp];
-    this.ferryVisual = this.add.container(195, DECK_Y + CELL_H, [shadow, hull, deck, rail, cabin, this.ramp, exitA, exitB]);
+    this.exitCues = [exitA, exitB];
+    this.ferryVisual = this.add.container(195, DECK_Y + CELL_H, [ferry, this.ramp, exitA, exitB]);
     if (!REDUCED_MOTION) this.tweens.add({ targets: this.ferryVisual, y: '+=2', duration: 1900, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     for (let lane = 0; lane < 2; lane += 1) {
       for (let cell = 0; cell < 5; cell += 1) {
@@ -162,38 +132,10 @@ export class GameScene extends Phaser.Scene {
     ManifestSystem.allVehicles(this.level).forEach((vehicle, index) => {
       const definition = getVehicleDefinition(vehicle.type);
       const width = definition.length * CELL_W - 8;
-      const body = this.add.graphics();
-      body.fillStyle(0x0b2732, 0.28).fillEllipse(3, 20, width - 2, 17);
-      if (vehicle.type === 'motorcycle') {
-        body.fillStyle(0x26383b).fillCircle(-14, 11, 10).fillCircle(14, 11, 10);
-        body.fillStyle(0xbcc8c3).fillCircle(-14, 11, 5).fillCircle(14, 11, 5);
-        body.lineStyle(5, definition.color).lineBetween(-12, 4, 1, -10).lineBetween(1, -10, 15, 8).lineBetween(-7, 4, 10, 4);
-        body.fillStyle(definition.accent).fillRoundedRect(-6, -12, 17, 7, 3).fillRect(11, -12, 4, 16);
-      } else {
-        const top = vehicle.type === 'van' || vehicle.type === 'ambulance' ? -25 : -20;
-        const height = vehicle.type === 'truck' ? 42 : vehicle.type === 'van' || vehicle.type === 'ambulance' ? 45 : 38;
-        body.fillStyle(definition.color).fillRoundedRect(-width / 2, top, width, height, vehicle.type === 'truck' ? 5 : 10);
-        body.lineStyle(2, definition.accent, 0.8).strokeRoundedRect(-width / 2, top, width, height, vehicle.type === 'truck' ? 5 : 10);
-        body.fillStyle(0x26383b).fillCircle(-width / 2 + 17, 18, 8).fillCircle(width / 2 - 17, 18, 8);
-        body.fillStyle(0xbcc8c3).fillCircle(-width / 2 + 17, 18, 4).fillCircle(width / 2 - 17, 18, 4);
-        body.fillStyle(0x315965).fillRoundedRect(width / 2 - 39, top + 6, 27, 15, 4);
-        body.fillStyle(0xe5f2eb, 0.5).fillRect(width / 2 - 35, top + 8, 10, 11);
-        body.fillStyle(0xf2d77c).fillCircle(width / 2 - 3, 7, 3);
-        if (vehicle.type === 'car') body.fillStyle(definition.accent, 0.8).fillRoundedRect(-width / 2 + 18, top + 4, 42, 15, 7);
-        if (vehicle.type === 'van') {
-          body.fillStyle(0xf0e5ca, 0.45).fillRect(-width / 2 + 13, top + 7, 19, 14).fillRect(-width / 2 + 37, top + 7, 19, 14);
-          body.lineStyle(2, definition.accent, 0.45).lineBetween(-3, top + 3, -3, top + height - 4);
-        }
-        if (vehicle.type === 'ambulance') {
-          body.fillStyle(0xb94c48).fillRect(-9, top + 6, 8, 25).fillRect(-17, top + 14, 24, 8);
-          body.fillStyle(0x4d91ad).fillRoundedRect(-width / 2 + 16, top - 5, 20, 7, 3);
-        }
-        if (vehicle.type === 'truck') {
-          body.fillStyle(definition.accent, 0.85).fillRoundedRect(-width / 2 + 5, top + 4, width - 60, height - 8, 3);
-          body.lineStyle(2, 0xdce0bf, 0.38).lineBetween(-width / 2 + 18, top + 5, -width / 2 + 18, top + height - 5)
-            .lineBetween(-width / 2 + 37, top + 5, -width / 2 + 37, top + height - 5);
-        }
-      }
+      const body = this.add.image(0, 0, `vehicle-${vehicle.type}`);
+      const targetWidth = vehicle.type === 'motorcycle' ? 52 : width;
+      const artScale = Math.min(targetWidth / body.width, 64 / body.height);
+      body.setScale(artScale);
       const label = this.add.text(0, vehicle.type === 'ambulance' ? -35 : -5, vehicle.priority ? 'PRIORITY' : definition.shortLabel, textStyle(9, '#fff8e8')).setOrigin(0.5);
       if (vehicle.priority) label.setBackgroundColor('#9d3f42').setPadding(5, 2);
       let badge: Phaser.GameObjects.Container | undefined;
