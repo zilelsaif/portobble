@@ -136,7 +136,7 @@ export class GameScene extends Phaser.Scene {
       const targetWidth = vehicle.type === 'motorcycle' ? 52 : width;
       const artScale = Math.min(targetWidth / body.width, 64 / body.height);
       body.setScale(artScale);
-      const label = this.add.text(0, vehicle.type === 'ambulance' ? -35 : -5, vehicle.priority ? 'PRIORITY' : definition.shortLabel, textStyle(9, '#fff8e8')).setOrigin(0.5);
+      const label = this.add.text(0, vehicle.type === 'ambulance' ? -35 : -5, vehicle.priority ? 'PRIORITY' : definition.shortLabel, textStyle(9, '#fff8e8')).setOrigin(0.5).setDepth(4);
       if (vehicle.priority) label.setBackgroundColor('#9d3f42').setPadding(5, 2);
       let badge: Phaser.GameObjects.Container | undefined;
       if (vehicle.destination) {
@@ -144,13 +144,13 @@ export class GameScene extends Phaser.Scene {
         const badgeWidth = port.shortName.length > 3 ? 42 : 36;
         const badgeBg = this.add.rectangle(0, 0, badgeWidth, 21, port.badgeColor, 1).setStrokeStyle(2, 0xfff6df, 0.95);
         const badgeLabel = this.add.text(0, 0, port.shortName, textStyle(10, `#${port.badgeTextColor.toString(16).padStart(6, '0')}`)).setOrigin(0.5);
-        badge = this.add.container(vehicle.type === 'motorcycle' ? 0 : width / 2 - 21, vehicle.type === 'motorcycle' ? -30 : 1, [badgeBg, badgeLabel]).setDepth(3);
+        badge = this.add.container(vehicle.type === 'motorcycle' ? 0 : width / 2 - 21, vehicle.type === 'motorcycle' ? -30 : 1, [badgeBg, badgeLabel]).setDepth(5);
       }
-      const lock = this.add.text(-width / 2 + 15, -29, 'LOCK', textStyle(7, '#fff4c7')).setOrigin(0.5).setBackgroundColor('#203e4a').setPadding(4, 2).setVisible(false);
+      const lock = this.add.text(-width / 2 + 15, -29, 'LOCK', textStyle(7, '#fff4c7')).setOrigin(0.5).setBackgroundColor('#203e4a').setPadding(4, 2).setDepth(6).setVisible(false);
       const container = this.add.container(0, 0, badge ? [body, label, badge, lock] : [body, label, lock]).setSize(width, 96).setDepth(10);
       if (badge) container.setData('destinationBadge', badge);
       container.setData('lockBadge', lock);
-      container.setData('vehicleId', vehicle.id).setData('queueIndex', index).setInteractive({ useHandCursor: true, draggable: true });
+      container.setData('vehicleId', vehicle.id).setData('queueIndex', index).setData('vehicleArt', body).setData('baseArtScale', artScale).setData('vehicleLabel', label).setInteractive({ useHandCursor: true, draggable: true });
       this.input.setDraggable(container);
       this.bindDrag(container, vehicle);
       this.vehicles.set(vehicle.id, container);
@@ -260,26 +260,30 @@ export class GameScene extends Phaser.Scene {
       this.input.setDraggable(container);
       const locked = this.manifestState?.lockedVehicleIds.includes(vehicle.id) ?? false;
       (container.getData('lockBadge') as Phaser.GameObjects.Text | undefined)?.setVisible(locked);
+      const art = container.getData('vehicleArt') as Phaser.GameObjects.Image;
+      const baseArtScale = container.getData('baseArtScale') as number;
       const placement = this.state.placements.find((item) => item.vehicleId === vehicle.id);
       if (placement) {
         const length = getVehicleDefinition(vehicle.type).length;
         const targetX = DECK_X + placement.startCell * CELL_W + length * CELL_W / 2;
         const targetY = DECK_Y + placement.lane * CELL_H + CELL_H / 2;
+        art.setPosition(placement.lane * 4 - 2, placement.lane === 0 ? -4 : 2).setScale(baseArtScale);
         if (animatedVehicleId === vehicle.id && !REDUCED_MOTION) {
           this.tweens.add({ targets: container, x: targetX, y: targetY, scale: 0.92, angle: 0, duration: 190, ease: 'Back.out' });
         } else container.setPosition(targetX, targetY).setScale(0.92).setAngle(0);
         this.setBadgeScreenScale(container, 0.92);
-        container.setDepth(10);
+        container.setDepth(this.vehicleRenderDepth(targetX, targetY));
       } else {
         const column = visibleIndex % 3;
         const row = Math.floor(visibleIndex / 3);
         const targetX = 66 + column * 129;
-        const targetY = 146 + row * 72;
+        const targetY = 146 + row * 58;
+        art.setPosition((column - 1) * 2, row % 2 === 0 ? 0 : 2).setScale(baseArtScale * 1.65);
         if (animatedVehicleId === vehicle.id && !REDUCED_MOTION) {
           this.tweens.add({ targets: container, x: targetX, y: targetY, scale: 0.57, angle: 0, duration: 180, ease: 'Sine.out' });
         } else container.setPosition(targetX, targetY).setScale(0.57).setAngle(0);
         this.setBadgeScreenScale(container, 0.57);
-        container.setDepth(10);
+        container.setDepth(this.vehicleRenderDepth(targetX, targetY));
       }
     });
     this.updateBalance(animatedVehicleId !== undefined);
@@ -288,6 +292,10 @@ export class GameScene extends Phaser.Scene {
       const weight = vehicle ? getVehicleDefinition(vehicle.type).weight : 1;
       this.tweens.add({ targets: this.ferryVisual, scaleY: 1 - weight * 0.006, duration: 90, yoyo: true, ease: 'Sine.inOut' });
     }
+  }
+
+  private vehicleRenderDepth(x: number, y: number): number {
+    return 10 + y / 1000 + x / 1000000;
   }
 
   private drawBalancePanel(): void {
@@ -532,7 +540,11 @@ export class GameScene extends Phaser.Scene {
 
   private setBadgeScreenScale(container: Phaser.GameObjects.Container, vehicleScale: number): void {
     const badge = container.getData('destinationBadge') as Phaser.GameObjects.Container | undefined;
+    const label = container.getData('vehicleLabel') as Phaser.GameObjects.Text | undefined;
+    const lock = container.getData('lockBadge') as Phaser.GameObjects.Text | undefined;
     if (badge) badge.setScale(1 / vehicleScale);
+    if (label) label.setScale(1 / vehicleScale);
+    if (lock) lock.setScale(1 / vehicleScale);
   }
 
   private updateTideHud(leg?: RouteLegDefinition): void {
@@ -580,18 +592,21 @@ export class GameScene extends Phaser.Scene {
     const nextPort = this.level.route!.ports[this.manifestState.portIndex + 1]!;
     const unloadIds = this.state.placements.filter((placement) => findLevelVehicle(this.level, placement.vehicleId)?.destination === nextPort).map((placement) => placement.vehicleId);
     Sfx.play('horn'); this.journey.travelTo(nextPort, () => {
-      if (this.manifestState) this.manifestState = ManifestSystem.transition(this.manifestState, 'unloading') ?? this.manifestState;
+      if (!this.manifestState) return;
+      const arrivedState = ManifestSystem.arrive(this.level, { ...this.manifestState, ferry: this.state });
+      this.manifestState = { ...this.manifestState, portIndex: arrivedState.portIndex, phase: 'unloading' };
+      this.routeText?.setText(this.formatRoute(nextPort));
+      this.feedbackText.setText(`${portFullName(nextPort).toUpperCase()} • UNLOADING ${unloadIds.length}`).setColor('#d9ffd6');
       const tweens = unloadIds.flatMap((id) => {
         const vehicle = this.vehicles.get(id);
         return vehicle ? [{ targets: vehicle, x: 438, alpha: 0, duration: REDUCED_MOTION ? 1 : 160 }] : [];
       });
-      this.tweens.chain({ targets: [], tweens, onComplete: () => this.enterManifestPort(nextPort) });
+      this.tweens.chain({ targets: [], tweens, onComplete: () => this.enterManifestPort(nextPort, arrivedState) });
     });
   }
 
-  private enterManifestPort(port: string): void {
-    if (!this.manifestState) return;
-    this.manifestState = ManifestSystem.arrive(this.level, { ...this.manifestState, ferry: this.state });
+  private enterManifestPort(port: string, arrivedState: ManifestState): void {
+    this.manifestState = arrivedState;
     this.state = this.manifestState.ferry;
     this.history = [];
     this.sailing = false;

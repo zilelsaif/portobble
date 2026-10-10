@@ -362,6 +362,25 @@ describe('ManifestSystem', () => {
     expect(ManifestSystem.transition({ ...initial, phase: 'complete' }, 'sailing')).toBeNull();
   });
 
+  it('advances the logical active port through every four-port arrival', () => {
+    const level = getLevel(37);
+    const solution = LevelSolver.solveManifest(level)!;
+    let state = ManifestSystem.initialState(level);
+    const arrivedPorts: string[] = [];
+    for (const stage of solution.stages) {
+      state = ManifestSystem.arrive(level, { ...state, ferry: stage.departureState });
+      arrivedPorts.push(level.route!.ports[state.portIndex]!);
+    }
+    expect(arrivedPorts).toEqual(['B', 'C', 'D']);
+    expect(state.phase).toBe('complete');
+  });
+
+  it('keeps the non-pickup four-port stop order deterministic', () => {
+    const level = getLevel(17);
+    const solution = LevelSolver.solve(level)!;
+    expect(RouteSystem.simulate(level, solution).stops.map((stop) => stop.port)).toEqual(['B', 'C', 'D']);
+  });
+
   it('rejects invalid pickup destinations and duplicate runtime IDs', () => {
     const level = getLevel(31);
     const invalidDestination = { ...level, pickups: [{ port: 'B', vehicles: [{ id: 'bad', type: 'car' as const, destination: 'A' }] }] };
